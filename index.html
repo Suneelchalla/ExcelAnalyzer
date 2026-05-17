@@ -89,6 +89,8 @@ kbd{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
 .filter-bar select,.filter-bar input[type=text]{background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.32rem .6rem;font-size:.78rem;outline:none;min-width:120px;transition:border-color .2s;font-family:'DM Sans',sans-serif;}
 .filter-bar select:focus,.filter-bar input:focus{border-color:var(--accent);}
 .filter-group{display:flex;align-items:center;gap:.3rem;}
+.pb-note-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.32rem .7rem;font-size:.75rem;outline:none;box-sizing:border-box;font-family:'DM Sans',sans-serif;}
+.pb-note-input:focus{border-color:var(--accent);}
 .preset-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--muted);padding:.25rem .6rem;font-size:.7rem;cursor:pointer;transition:all .15s;}
 .preset-btn:hover,.preset-btn.active{border-color:var(--accent);color:var(--accent);}
 .date-range-group{display:flex;align-items:center;gap:.3rem;}
@@ -310,6 +312,12 @@ tr.total-row td{background:var(--surface2);font-weight:600;color:var(--accent);b
 .pivot-cell-click{cursor:pointer;transition:background .1s;}
 .pivot-cell-click:hover{background:rgba(0,212,255,.12)!important;color:var(--accent);}
 .trend-period-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);padding:.18rem .5rem;font-size:.7rem;cursor:pointer;transition:all .15s;margin-left:.15rem;}
+.preset-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);padding:.22rem .65rem;font-size:.72rem;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.preset-btn:hover{background:rgba(0,212,255,.12);border-color:var(--accent);color:var(--accent);}
+.pivot-tab-btn{transition:all .15s;}
+.pivot-tab-btn:hover{border-color:var(--accent)!important;}
+.pivot-panel{display:none;}
+.pivot-panel.active{display:block;}
 .trend-period-btn.active{background:rgba(0,212,255,.15);border-color:var(--accent);color:var(--accent);}
 @media print{#upload-screen{display:none!important;}header .header-actions{display:none!important;}.tabs{display:none!important;}.filter-bar{display:none!important;}.tab-panel{display:block!important;page-break-after:always;}.chart-card{page-break-inside:avoid;}body{background:#fff!important;color:#000!important;}}
 </style>
@@ -498,7 +506,7 @@ tr.total-row td{background:var(--surface2);font-weight:600;color:var(--accent);b
   <div id="tab-analytics" class="tab-panel content">
     <div class="analytics-section">
       <div class="section-title">📅 Volume Over Time
-        <select id="trend-field" onchange="renderTrend()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:.2rem .5rem;font-size:.72rem;outline:none;font-family:'DM Sans',sans-serif;"><option value="Resolved">By Resolved</option><option value="Created">By Created</option></select>
+        <select id="trend-field" onchange="renderTrend()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:.2rem .5rem;font-size:.72rem;outline:none;font-family:'DM Sans',sans-serif;"><option value="Created">By Created</option><option value="Resolved">By Resolved</option></select>
         <div id="trend-period-btns"><button class="trend-period-btn" onclick="setTrendPeriod('month',this)">Month</button><button class="trend-period-btn" onclick="setTrendPeriod('week',this)">Week</button><button class="trend-period-btn active" onclick="setTrendPeriod('day',this)">Day</button></div>
       </div>
       <div class="chart-card wide"><div class="chart-wrap tall"><canvas id="trendChart"></canvas></div><div class="chart-hint">click any point to see tickets for that period</div></div>
@@ -617,7 +625,7 @@ id="tab-charts" class="tab-panel content">
     </div>
     <div class="search-row">
       <input type="text" class="search-input" id="data-search" placeholder="🔍  Search key, summary, project, worker… (regex supported)" oninput="renderDataTable()">
-      <select id="d-who" onchange="renderDataTable()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.45rem .65rem;font-size:.78rem;outline:none;font-family:'DM Sans',sans-serif;"><option value="">All WHO</option><option value="HD">HD</option><option value="ENGG">ENGG</option></select>
+      <select id="d-who" onchange="renderDataTable()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.45rem .65rem;font-size:.78rem;outline:none;font-family:'DM Sans',sans-serif;"><option value="">All WHO</option></select>
       <select id="d-issuetype" onchange="renderDataTable()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.45rem .65rem;font-size:.78rem;outline:none;font-family:'DM Sans',sans-serif;"><option value="">All Types</option><option value="Incident">🔴 Incident</option><option value="Service Request">🔵 Service Request</option></select>
       <select id="d-sort" onchange="renderDataTable()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:.45rem .65rem;font-size:.78rem;outline:none;font-family:'DM Sans',sans-serif;"><option value="">Default</option><option value="Issue Type-asc">Type (Inc first)</option><option value="Issue Type-desc">Type (SR first)</option><option value="Priority-asc">Priority ↑</option><option value="Priority-desc">Priority ↓</option><option value="Resolved-desc">Resolved (New)</option><option value="Resolved-asc">Resolved (Old)</option><option value="Project-asc">Project A-Z</option></select>
       <span id="data-count" style="color:var(--muted);font-size:.78rem;white-space:nowrap;"></span>
@@ -630,22 +638,34 @@ id="tab-charts" class="tab-panel content">
   </div>
 
   <div id="tab-builder" class="tab-panel content">
-    <div class="chart-card" style="margin-bottom:1.1rem;">
-      <div class="chart-title">🔧 Pivot Builder</div>
-      <div style="display:flex;gap:.9rem;flex-wrap:wrap;align-items:flex-end;">
-        <div style="display:flex;flex-direction:column;gap:.25rem;"><label style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Row Field</label><select id="pb-row" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.4rem .6rem;font-size:.8rem;outline:none;min-width:145px;font-family:'DM Sans',sans-serif;"><option>Issue Type</option><option>Root Cause</option><option>WHO</option><option>Priority</option><option>Components</option><option>Project</option><option>Type of Fix</option><option>Current Worker</option><option>SVM In Charge</option></select></div>
-        <div style="display:flex;flex-direction:column;gap:.25rem;"><label style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Col Field</label><select id="pb-col" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.4rem .6rem;font-size:.8rem;outline:none;min-width:145px;font-family:'DM Sans',sans-serif;"><option value="">— None —</option><option>Issue Type</option><option>WHO</option><option>Root Cause</option><option>Priority</option><option>Components</option><option>Type of Fix</option></select></div>
-        <div style="display:flex;flex-direction:column;gap:.25rem;"><label style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Cond Format</label><select id="pb-condformat" style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.4rem .6rem;font-size:.8rem;outline:none;font-family:'DM Sans',sans-serif;"><option value="none">None</option><option value="heat">Heatmap</option><option value="traffic">Traffic Light</option></select></div>
-        <button class="btn btn-primary" onclick="buildPivot()">▶ Build</button>
-        <button class="btn btn-secondary" onclick="exportPivotCSV()">⬇ CSV</button>
-        <button class="btn btn-secondary" onclick="pivotToChart()">📊 Chart</button>
+
+  <!-- Quick Insights Presets -->
+  <div class="chart-card" style="margin-bottom:.8rem;padding:.75rem 1rem;">
+    <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+      <span style="font-family:'Syne',sans-serif;font-size:.8rem;font-weight:700;white-space:nowrap;">📋 Quick Insights:</span>
+      <div style="display:flex;gap:.3rem;flex-wrap:wrap;flex:1;">
+        <button class="preset-btn" onclick="loadPredefinedPivot(0)">🔴🔵 Type × Team</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(1)">Priority Breakdown</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(2)">Root Cause Analysis</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(3)">Agent Workload</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(4)">Project Impact</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(5)">Component Issues</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(6)">Fix Type Analysis</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(7)">SVM Performance</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(8)">Agent vs Priority</button>
+        <button class="preset-btn" onclick="loadPredefinedPivot(9)">Project × Root Cause</button>
       </div>
+      <button class="btn btn-primary btn-sm" onclick="addPivotTab()" style="white-space:nowrap;">＋ Add Pivot</button>
     </div>
-    <div class="chart-card" id="pb-card"><div class="chart-title" id="pb-title">Pivot Result</div><div class="table-wrap" id="pb-result"></div></div>
-    <div class="chart-card" id="pb-chart-card" style="display:none;margin-top:1.1rem;"><div class="chart-title" id="pb-chart-title">Pivot Chart</div><div class="chart-wrap tall"><canvas id="pbChart"></canvas></div></div>
   </div>
 
-  <div id="tab-comparator" class="tab-panel content">
+  <!-- Pivot Tab Bar -->
+  <div id="pivot-tab-bar" style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.8rem;align-items:center;border-bottom:1px solid var(--border);padding-bottom:.5rem;"></div>
+
+  <!-- Pivot Panels -->
+  <div id="pivot-panels-container"></div>
+
+<div id="tab-comparator" class="tab-panel content">
     <div id="comp-status" class="status-bar"></div>
     <div class="comp-upload-row">
       <div class="comp-drop" id="comp-drop-a" onclick="document.getElementById('comp-file-a').click()"><div style="font-size:1.8rem;margin-bottom:.4rem;">📁</div><h4>Previous Month</h4><p id="comp-label-a">Click or drag</p></div>
@@ -785,6 +805,16 @@ const CF={
 
 function norm(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
 
+// ── GLOBAL: Statuses that mean a ticket is genuinely closed ──
+const CLOSED_STATUSES=new Set([
+  'resolved with clarification','db script delivered','delivered',
+  'release move to production','client release approval',
+  'client approval (db script)','poc release approval',
+  'client hotfix testing','closed','done','resolved','fixed',
+  'complete','completed','confirmation'
+]);
+function isClosed(r){return CLOSED_STATUSES.has((r['Status']||'').toLowerCase().trim());}
+
 // Safe row registry: store rows by key to avoid JSON escaping in onclick attributes
 function storeRow(r){if(r&&r['Key'])S._rows[r['Key']]=r;return r['Key']||'';}
 function getRow(key){return S._rows[key]||null;}
@@ -831,7 +861,7 @@ function autoDetectMapping(columns){
 function mappedCount(map){return Object.values(map).filter(v=>v&&v!=='__UNMAPPED__').length;}
 
 // ── HELPERS ──
-function countBy(data,f){const c={};data.forEach(r=>{const v=r[f]||'Unknown';if(v)c[v]=(c[v]||0)+1;});return Object.fromEntries(Object.entries(c).filter(([k])=>k&&k!=='-').sort((a,b)=>b[1]-a[1]));}
+function countBy(data,f){const c={};data.forEach(r=>{const v=(r[f]||'').trim();if(v&&v!=='-'&&v!=='Unknown'&&v!=='None')c[v]=(c[v]||0)+1;});return Object.fromEntries(Object.entries(c).sort((a,b)=>b[1]-a[1]));}
 function parseDate(s){
   if(!s||s==='-'||s==='')return null;
   // Handle Excel serial numbers (e.g. 46157.794)
@@ -944,7 +974,7 @@ function launchDashboard(name,sheetCount){
   document.getElementById('upload-screen').style.display='none';
   document.getElementById('dashboard').style.display='block';
   document.getElementById('mapping-modal').classList.remove('show');
-  populateFilters();renderAll();runDataQuality();buildColToggles();updateMappingBadge();renderRecentFiles();restoreSession();
+  populateFilters();renderAll();runDataQuality();buildColToggles();updateMappingBadge();renderRecentFiles();restoreSession();setTimeout(initPivotBuilder,100);
   // Check if we have a saved session for this file
   const sess=JSON.parse(localStorage.getItem('hd_session')||'null');
   const hasSavedSession=sess&&sess.filters;
@@ -1066,7 +1096,7 @@ function saveSession(){
   const session={
     fileName:document.getElementById('file-info').textContent,
     filters:{who:$v('f-who'),rc:$v('f-rootcause'),pri:$v('f-priority'),proj:$v('f-project'),
-      worker:$v('f-worker'),comp:$v('f-components'),dateFrom:$v('f-date-from'),dateTo:$v('f-date-to')},
+      worker:$v('f-worker'),comp:$v('f-components'),issuetype:$v('f-issuetype'),dateFrom:$v('f-date-from'),dateTo:$v('f-date-to')},
     activeTab:document.querySelector('.tab.active')?.textContent?.trim()||'',
     chartTypes:{...S.chartTypes},
     advRules:[...S.advRules],
@@ -1096,8 +1126,8 @@ function restoreSession(){
   if(!s)return;
   // Restore filters
   if(s.filters){
-    ['f-who','f-rootcause','f-priority','f-project','f-worker','f-components','f-date-from','f-date-to']
-    .forEach((id,i)=>{const keys=['who','rc','pri','proj','worker','comp','dateFrom','dateTo'];
+    ['f-who','f-rootcause','f-priority','f-project','f-worker','f-components','f-issuetype','f-date-from','f-date-to']
+    .forEach((id,i)=>{const keys=['who','rc','pri','proj','worker','comp','issuetype','dateFrom','dateTo'];
       const el=document.getElementById(id);if(el&&s.filters[keys[i]])el.value=s.filters[keys[i]];});
   }
   // Restore chart types
@@ -1186,6 +1216,13 @@ function updateMappingBadge(){const u=Object.entries(S.fieldMap).filter(([,v])=>
 function populateFilters(){
   const map={'f-who':'WHO','f-rootcause':'Root Cause','f-priority':'Priority','f-project':'Project','f-worker':'Current Worker','f-components':'Components'};
   Object.entries(map).forEach(([id,canonical])=>{const wrap=document.getElementById(id)?.closest('.filter-group');if(!fieldAvailable(canonical)){if(wrap)wrap.style.display='none';return;}if(wrap)wrap.style.display='';const sel=document.getElementById(id);sel.innerHTML='<option value="">All</option>';[...new Set(S.raw.map(r=>r[canonical]).filter(v=>v&&v!=='-'&&v!=='Unknown'))].sort().forEach(v=>{const o=document.createElement('option');o.value=o.textContent=v;sel.appendChild(o);});});
+  // Populate data tab WHO filter dynamically
+  const dWho=document.getElementById('d-who');
+  if(dWho&&fieldAvailable('WHO')){
+    const whoVals=[...new Set(S.raw.map(r=>r['WHO']).filter(v=>v&&v!=='-'))].sort();
+    const curWho=dWho.value;
+    dWho.innerHTML='<option value="">All WHO</option>'+whoVals.map(v=>`<option value="${v}"${v===curWho?' selected':''}>${v}</option>`).join('');
+  }
   renderPresetQuick();
 }
 
@@ -1212,9 +1249,9 @@ function applyFilters(){
 
 function resetFilters(){['f-who','f-rootcause','f-priority','f-project','f-worker','f-components','f-date-from','f-date-to','f-issuetype'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});S.advRules=[];S.filtered=[...S.raw];S.page=1;renderAll();saveSession();}
 
-function addFilterHistory(){const snap={time:Date.now(),who:$v('f-who'),rc:$v('f-rootcause'),pri:$v('f-priority'),proj:$v('f-project'),worker:$v('f-worker'),comp:$v('f-components'),dateFrom:$v('f-date-from'),dateTo:$v('f-date-to')};const label=[snap.who,snap.rc,snap.pri,snap.proj,snap.worker,snap.comp].filter(Boolean).join(' · ')||'All records';if(label==='All records')return;S.filterHistory=S.filterHistory.filter(f=>f.label!==label);S.filterHistory.unshift({...snap,label});S.filterHistory=S.filterHistory.slice(0,10);localStorage.setItem('hd_fh',JSON.stringify(S.filterHistory));}
+function addFilterHistory(){const snap={time:Date.now(),who:$v('f-who'),rc:$v('f-rootcause'),pri:$v('f-priority'),proj:$v('f-project'),worker:$v('f-worker'),comp:$v('f-components'),issuetype:$v('f-issuetype'),dateFrom:$v('f-date-from'),dateTo:$v('f-date-to')};const label=[snap.who,snap.rc,snap.pri,snap.proj,snap.worker,snap.comp,snap.issuetype].filter(Boolean).join(' · ')||'All records';if(label==='All records')return;S.filterHistory=S.filterHistory.filter(f=>f.label!==label);S.filterHistory.unshift({...snap,label});S.filterHistory=S.filterHistory.slice(0,10);localStorage.setItem('hd_fh',JSON.stringify(S.filterHistory));}
 function toggleFilterHistory(){const drop=document.getElementById('filter-history-drop');drop.classList.toggle('show');if(!S.filterHistory.length){drop.innerHTML='<div class="fh-item" style="color:var(--muted);">No history yet</div>';return;}drop.innerHTML=S.filterHistory.map((f,i)=>`<div class="fh-item" onclick="applyHistoryFilter(${i})"><span>${f.label}</span><span class="fh-time">${new Date(f.time).toLocaleTimeString()}</span></div>`).join('');}
-function applyHistoryFilter(i){const f=S.filterHistory[i];if(!f)return;['f-who','f-rootcause','f-priority','f-project','f-worker','f-components','f-date-from','f-date-to'].forEach((id,j)=>{const keys=['who','rc','pri','proj','worker','comp','dateFrom','dateTo'];const el=document.getElementById(id);if(el)el.value=f[keys[j]]||'';});applyFilters();document.getElementById('filter-history-drop').classList.remove('show');}
+function applyHistoryFilter(i){const f=S.filterHistory[i];if(!f)return;['f-who','f-rootcause','f-priority','f-project','f-worker','f-components','f-issuetype','f-date-from','f-date-to'].forEach((id,j)=>{const keys=['who','rc','pri','proj','worker','comp','issuetype','dateFrom','dateTo'];const el=document.getElementById(id);if(el)el.value=f[keys[j]]||'';});applyFilters();document.getElementById('filter-history-drop').classList.remove('show');}
 
 const ADV_FIELDS=['Issue Type','Root Cause','WHO','Priority','Project','Current Worker','Components','Type of Fix','SVM In Charge','Status'];
 const ADV_OPS=['is','is not','contains','does not contain','is empty','is not empty'];
@@ -1232,8 +1269,8 @@ function deletePreset(i){S.presets.splice(i,1);localStorage.setItem('hd_presets'
 function showPresetsModal(){const list=document.getElementById('preset-list');list.innerHTML=!S.presets.length?'<p style="color:var(--muted);font-size:.82rem;">No presets saved.</p>':S.presets.map((p,i)=>`<div class="view-item" onclick="applyPreset(${i})"><span class="view-item-name">${p.name}</span><span style="font-size:.7rem;color:var(--muted)">${[p.who,p.rc,p.pri,p.proj,p.worker,p.comp].filter(Boolean).join(' · ')||'All'}</span><button class="view-item-del" onclick="event.stopPropagation();deletePreset(${i})">✕</button></div>`).join('');document.getElementById('preset-modal').classList.add('show');}
 function renderPresetQuick(){document.getElementById('preset-quick').innerHTML=S.presets.slice(0,4).map((p,i)=>`<button class="preset-btn" onclick="applyPreset(${i})">${p.name}</button>`).join('');}
 
-function saveCurrentView(){const name=prompt('Name this view:');if(!name)return;const view={name,time:Date.now(),filters:{who:$v('f-who'),rc:$v('f-rootcause'),pri:$v('f-priority'),proj:$v('f-project'),worker:$v('f-worker'),comp:$v('f-components'),dateFrom:$v('f-date-from'),dateTo:$v('f-date-to')},activeTab:document.querySelector('.tab.active')?.textContent||'',chartTypes:{...S.chartTypes}};S.views.unshift(view);S.views=S.views.slice(0,10);localStorage.setItem('hd_views',JSON.stringify(S.views));showViewsModal();showStatus(`✅ View "${name}" saved`);}
-function applyView(i){const v=S.views[i];if(!v)return;['f-who','f-rootcause','f-priority','f-project','f-worker','f-components','f-date-from','f-date-to'].forEach((id,j)=>{const keys=['who','rc','pri','proj','worker','comp','dateFrom','dateTo'];const el=document.getElementById(id);if(el)el.value=v.filters[keys[j]]||'';});S.chartTypes={...v.chartTypes||{}};applyFilters();document.getElementById('views-modal').classList.remove('show');}
+function saveCurrentView(){const name=prompt('Name this view:');if(!name)return;const view={name,time:Date.now(),filters:{who:$v('f-who'),rc:$v('f-rootcause'),pri:$v('f-priority'),proj:$v('f-project'),worker:$v('f-worker'),comp:$v('f-components'),issuetype:$v('f-issuetype'),dateFrom:$v('f-date-from'),dateTo:$v('f-date-to')},activeTab:document.querySelector('.tab.active')?.textContent||'',chartTypes:{...S.chartTypes}};S.views.unshift(view);S.views=S.views.slice(0,10);localStorage.setItem('hd_views',JSON.stringify(S.views));showViewsModal();showStatus(`✅ View "${name}" saved`);}
+function applyView(i){const v=S.views[i];if(!v)return;['f-who','f-rootcause','f-priority','f-project','f-worker','f-components','f-issuetype','f-date-from','f-date-to'].forEach((id,j)=>{const keys=['who','rc','pri','proj','worker','comp','issuetype','dateFrom','dateTo'];const el=document.getElementById(id);if(el)el.value=v.filters[keys[j]]||'';});S.chartTypes={...v.chartTypes||{}};applyFilters();document.getElementById('views-modal').classList.remove('show');}
 function deleteView(i){S.views.splice(i,1);localStorage.setItem('hd_views',JSON.stringify(S.views));showViewsModal();}
 function showViewsModal(){
   // Show session info at top
@@ -1253,11 +1290,7 @@ function renderAll(){renderKPIs();renderOverviewCharts();renderPivotTables();ren
 function renderKPIs(){
   const d=S.filtered,tot=d.length;
   // Only count tickets whose Status indicates genuinely closed/done
-  const CLOSED=new Set(['resolved with clarification','db script delivered','delivered',
-    'release move to production','client release approval','client approval (db script)',
-    'poc release approval','client hotfix testing','closed','done','resolved','fixed',
-    'complete','completed']);
-  const isClosed=r=>CLOSED.has((r['Status']||'').toLowerCase().trim());
+  // uses global isClosed()
   const hdAll=fieldAvailable('WHO')?d.filter(r=>r['WHO']==='HD').length:0;
   const enggAll=fieldAvailable('WHO')?d.filter(r=>r['WHO']==='ENGG').length:0;
   const hdClosed=fieldAvailable('WHO')?d.filter(r=>r['WHO']==='HD'&&isClosed(r)).length:null;
@@ -1539,10 +1572,93 @@ function renderAgentLeaderboard(){
   const d=S.filtered;
   if(!fieldAvailable('Current Worker')){document.getElementById('agent-table').innerHTML='<div style="padding:.9rem;color:var(--muted);font-size:.8rem;">Worker field not mapped.</div>';return;}
   const workers=[...new Set(d.map(r=>r['Current Worker']).filter(v=>v&&v!=='-'))];
-  const rows=workers.map(w=>{const sub=d.filter(r=>r['Current Worker']===w);return{w,total:sub.length,hd:sub.filter(r=>r['WHO']==='HD').length,engg:sub.filter(r=>r['WHO']==='ENGG').length,crit:sub.filter(r=>r['Priority']==='Critical').length};}).sort((a,b)=>b.total-a.total);
-  let html=`<table><thead><tr><th>#</th><th>Worker</th><th>Total</th><th>HD</th><th>ENGG</th><th>Crit</th></tr></thead><tbody>`;
-  rows.forEach((r,i)=>{const m=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';html+=`<tr style="cursor:pointer" onclick="showDrillDown('Current Worker','${r.w.replace(/'/g,"\\'")}',${r.total})"><td style="color:var(--muted)">${m||i+1}</td><td style="font-size:.78rem">${r.w}</td><td><strong style="color:var(--accent)">${r.total}</strong></td><td><span class="badge badge-hd">${r.hd}</span></td><td><span class="badge badge-engg">${r.engg}</span></td><td>${r.crit>0?`<span class="badge badge-critical">${r.crit}</span>`:'-'}</td></tr>`;});
+  // uses global isClosed()
+  const rows=workers.map(w=>{
+    const sub=d.filter(r=>r['Current Worker']===w);
+    const hdSub=sub.filter(r=>r['WHO']==='HD');
+    const enggSub=sub.filter(r=>r['WHO']==='ENGG');
+    const inc=sub.filter(r=>r['Issue Type']==='Incident').length;
+    const sr=sub.filter(r=>r['Issue Type']==='Service Request').length;
+    const closed=sub.filter(r=>CLOSED.has((r['Status']||'').toLowerCase().trim())).length;
+    return{w,total:sub.length,hd:hdSub.length,engg:enggSub.length,
+      crit:sub.filter(r=>r['Priority']==='Critical').length,inc,sr,closed};
+  }).sort((a,b)=>b.total-a.total);
+
+  let html=`<table><thead><tr>
+    <th>#</th><th>Worker</th><th>Total</th><th>Closed</th><th>HD</th><th>ENGG</th>
+    <th>🔴Inc</th><th>🔵SR</th><th>Critical</th>
+  </tr></thead><tbody>`;
+
+  rows.forEach((r,i)=>{
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    const wEnc=r.w.replace(/'/g,"\'");
+    html+=`<tr>
+      <td style="color:var(--muted)">${medal||i+1}</td>
+      <td style="font-size:.78rem;cursor:pointer;color:var(--accent)"
+        onclick="showDrillDown('Current Worker','${wEnc}',${r.total})"
+        title="Click to see all ${r.total} tickets">${r.w}</td>
+      <td style="cursor:pointer" onclick="showDrillDown('Current Worker','${wEnc}',${r.total})"
+        title="All ${r.total} tickets">
+        <strong style="color:var(--accent)">${r.total}</strong>
+      </td>
+      <td style="cursor:pointer" onclick="showWorkerSubset('${wEnc}','closed')"
+        title="Click to see ${r.closed} closed tickets">
+        <span class="badge badge-green">${r.closed}</span>
+      </td>
+      <td style="cursor:pointer" onclick="showWorkerSubset('${wEnc}','HD')"
+        title="Click to see ${r.hd} HD-only tickets">
+        <span class="badge badge-hd">${r.hd}</span>
+      </td>
+      <td style="cursor:pointer" onclick="showWorkerSubset('${wEnc}','ENGG')"
+        title="Click to see ${r.engg} ENGG-only tickets">
+        <span class="badge badge-engg">${r.engg}</span>
+      </td>
+      <td style="cursor:pointer" onclick="showWorkerSubset('${wEnc}','Incident')"
+        title="Click to see ${r.inc} Incident tickets">
+        <span style="color:#f87171;font-weight:600">${r.inc}</span>
+      </td>
+      <td style="cursor:pointer" onclick="showWorkerSubset('${wEnc}','Service Request')"
+        title="Click to see ${r.sr} Service Request tickets">
+        <span style="color:#a78bfa;font-weight:600">${r.sr}</span>
+      </td>
+      <td style="cursor:pointer" onclick="showWorkerSubset('${wEnc}','Critical')"
+        title="Click to see ${r.crit} Critical tickets">
+        ${r.crit>0?`<span class="badge badge-critical">${r.crit}</span>`:'-'}
+      </td>
+    </tr>`;
+  });
   document.getElementById('agent-table').innerHTML=html+'</tbody></table>';
+}
+
+// Drill into a specific subset of a worker's tickets
+function showWorkerSubset(worker,filter){
+  const d=S.filtered;
+  // uses global isClosed()
+  let subset, subtitle;
+  const base=d.filter(r=>r['Current Worker']===worker);
+  if(filter==='HD'){
+    subset=base.filter(r=>r['WHO']==='HD');
+    subtitle=`WHO = HD · ${subset.length} of ${base.length} tickets`;
+  } else if(filter==='ENGG'){
+    subset=base.filter(r=>r['WHO']==='ENGG');
+    subtitle=`WHO = ENGG · ${subset.length} of ${base.length} tickets`;
+  } else if(filter==='Incident'){
+    subset=base.filter(r=>r['Issue Type']==='Incident');
+    subtitle=`🔴 Incidents · ${subset.length} of ${base.length} tickets`;
+  } else if(filter==='Service Request'){
+    subset=base.filter(r=>r['Issue Type']==='Service Request');
+    subtitle=`🔵 Service Requests · ${subset.length} of ${base.length} tickets`;
+  } else if(filter==='Critical'){
+    subset=base.filter(r=>r['Priority']==='Critical');
+    subtitle=`🔴 Critical priority · ${subset.length} of ${base.length} tickets`;
+  } else if(filter==='closed'){
+    subset=base.filter(r=>CLOSED.has((r['Status']||'').toLowerCase().trim()));
+    subtitle=`✓ Closed tickets · ${subset.length} of ${base.length} tickets`;
+  } else {
+    subset=base;
+    subtitle=`All tickets`;
+  }
+  showTicketListPanel(worker,subtitle,subset);
 }
 
 function renderIssueTypeTrend(){
@@ -1861,7 +1977,421 @@ function renderPivotTables(){
   document.getElementById('pivot-project-fix').innerHTML=buildPivotHTML(d,'Project','Type of Fix');
 }
 
-let _lastPivot={};
+let _lastPivot={};  // kept for legacy pivots tab compatibility
+
+// ══════════════════════════════════════════════════════
+// MULTI-PIVOT BUILDER SYSTEM
+// ══════════════════════════════════════════════════════
+const PIVOT_PANELS = [];  // array of {id, rowF, colF, agg, fmt, sort, topn, note}
+
+const PREDEFINED_PIVOTS = [
+  {name:'Type × Team',         row:'Issue Type',      col:'WHO',          agg:'count',          fmt:'heat',    sort:'total-desc', topn:0},
+  {name:'Priority Breakdown',  row:'Priority',        col:'Issue Type',   agg:'count',          fmt:'traffic', sort:'total-desc', topn:0},
+  {name:'Root Cause Analysis', row:'Root Cause',      col:'WHO',          agg:'count',          fmt:'heat',    sort:'total-desc', topn:10},
+  {name:'Agent Workload',      row:'Current Worker',  col:'Issue Type',   agg:'count',          fmt:'heat',    sort:'total-desc', topn:0},
+  {name:'Project Impact',      row:'Project',         col:'Priority',     agg:'count',          fmt:'traffic', sort:'total-desc', topn:10},
+  {name:'Component Issues',    row:'Components',      col:'Root Cause',   agg:'count',          fmt:'heat',    sort:'total-desc', topn:10},
+  {name:'Fix Type Analysis',   row:'Type of Fix',     col:'WHO',          agg:'count',          fmt:'heat',    sort:'total-desc', topn:0},
+  {name:'SVM Performance',     row:'SVM In Charge',   col:'Priority',     agg:'count',          fmt:'traffic', sort:'total-desc', topn:0},
+  {name:'Agent vs Priority',   row:'Current Worker',  col:'Priority',     agg:'count_critical', fmt:'traffic', sort:'total-desc', topn:10},
+  {name:'Project × Root Cause',row:'Project',         col:'Root Cause',   agg:'count',          fmt:'heat',    sort:'total-desc', topn:10},
+];
+
+const ALL_FIELDS = ['Issue Type','Root Cause','WHO','Priority','Components','Project',
+  'Type of Fix','Current Worker','SVM In Charge','Status'];
+const COL_FIELDS = ['','Issue Type','WHO','Root Cause','Priority','Components','Type of Fix','Status'];
+
+function makePivotPanelHTML(pid){
+  const p=PIVOT_PANELS[pid]||{};
+  const SS='background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.35rem .55rem;font-size:.78rem;outline:none;min-width:130px;';
+  function sel(id,opts){return '<select id="'+id+'" onchange="autoRebuild('+pid+')" style="'+SS+'">'+opts+'</select>';}
+  function opt(v,l,sel){return '<option value="'+v+'"'+(sel?' selected':'')+'>'+l+'</option>';}
+  function lbl(l,input){return '<div style="display:flex;flex-direction:column;gap:.2rem;"><label style="font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">'+l+'</label>'+input+'</div>';}
+
+  const rowOpts=ALL_FIELDS.map(f=>opt(f,f,p.row===f)).join('');
+  const colOpts=opt('','— Count only —',!p.col)+ALL_FIELDS.map(f=>opt(f,f,p.col===f)).join('');
+  const aggOpts=[['count','Count of Tickets'],['count_closed','Count Closed'],['count_open','Count Open'],
+    ['count_critical','Count Critical'],['count_incident','Count Incidents'],
+    ['count_sr','Count Service Requests'],['pct_closed','% Closed'],['pct_critical','% Critical']
+  ].map(([v,l])=>opt(v,l,p.agg===v)).join('');
+  const fmtOpts=[['none','No Format'],['heat','🌡 Heatmap'],['traffic','🚦 Traffic Light'],['bar','📊 Mini Bars']
+  ].map(([v,l])=>opt(v,l,p.fmt===v)).join('');
+  const sortOpts=[['total-desc','Total ↓'],['total-asc','Total ↑'],['alpha-asc','A → Z'],['alpha-desc','Z → A']
+  ].map(([v,l])=>opt(v,l,p.sort===v)).join('');
+  const topnOpts=[['0','All'],['5','Top 5'],['10','Top 10'],['15','Top 15'],['20','Top 20']
+  ].map(([v,l])=>opt(v,l,String(p.topn||0)===v)).join('');
+
+  const controls=[
+    lbl('Row Field',sel('pb-row-'+pid,rowOpts)),
+    lbl('Column Field',sel('pb-col-'+pid,colOpts)),
+    lbl('Values',sel('pb-agg-'+pid,aggOpts)),
+    lbl('Format',sel('pb-fmt-'+pid,fmtOpts)),
+    lbl('Sort By',sel('pb-sort-'+pid,sortOpts)),
+    lbl('Top N',sel('pb-topn-'+pid,topnOpts)),
+  ].join('');
+
+  const btns='<div style="display:flex;gap:.35rem;align-items:flex-end;flex-wrap:wrap;padding-bottom:1px;">'+
+    '<button class="btn btn-primary btn-sm" onclick="buildPivotPanel('+pid+')">▶ Build</button>'+
+    '<button class="btn btn-secondary btn-sm" onclick="exportPivotPanel('+pid+')">⬇ CSV</button>'+
+    '<button class="btn btn-secondary btn-sm" onclick="pivotPanelToChart('+pid+')">📊 Chart</button>'+
+    '<button class="btn btn-secondary btn-sm" onclick="copyPivotTable('+pid+')">⧉ Copy</button>'+
+    '</div>';
+
+  return '<div id="pivot-panel-'+pid+'" class="pivot-panel">'+
+    '<div class="chart-card" style="margin-bottom:.7rem;padding:.75rem 1rem;">'+
+      '<div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;">'+controls+btns+'</div>'+
+      '<div style="margin-top:.55rem;">'+
+        '<input id="pb-note-'+pid+'" type="text" value="'+(p.note||'')+'"'+
+          ' placeholder="📝 Add notes about this pivot (editable)…"'+
+          ' style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:.32rem .7rem;font-size:.75rem;outline:none;box-sizing:border-box;"'+
+          ' class="pb-note-input" />'+
+      '</div>'+
+    '</div>'+
+    '<div class="chart-card" style="min-width:0;overflow:hidden;margin-bottom:.5rem;">'+
+      '<div class="chart-title" id="pb-title-'+pid+'" style="display:flex;justify-content:space-between;align-items:center;">'+
+        '<span>Select fields above and click ▶ Build</span>'+
+        '<span id="pb-record-count-'+pid+'" style="font-size:.7rem;color:var(--muted);font-weight:400;"></span>'+
+      '</div>'+
+      '<div style="overflow-x:auto;overflow-y:auto;max-height:500px;-webkit-overflow-scrolling:touch;">'+
+        '<div id="pb-result-'+pid+'"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="chart-card" id="pb-chart-card-'+pid+'" style="display:none;min-width:0;overflow:hidden;">'+
+      '<div class="chart-title" id="pb-chart-title-'+pid+'">Chart</div>'+
+      '<div class="chart-wrap tall"><canvas id="pbChart-'+pid+'"></canvas></div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderPivotTabBar(){
+  const bar = document.getElementById('pivot-tab-bar');
+  if(!bar)return;
+  bar.innerHTML = PIVOT_PANELS.map((p,i)=>`
+    <div class="pivot-tab-btn${p.active?' active':''}" id="ptab-${i}" onclick="switchPivotTab(${i})"
+      style="display:flex;align-items:center;gap:.4rem;background:${p.active?'rgba(0,212,255,.15)':'var(--surface2)'};
+      border:1px solid ${p.active?'var(--accent)':'var(--border)'};border-radius:7px;padding:.28rem .7rem;
+      cursor:pointer;font-size:.78rem;color:${p.active?'var(--accent)':'var(--muted)'};">
+      <span id="ptab-label-${i}">${p.name||'Pivot '+(i+1)}</span>
+      ${PIVOT_PANELS.length>1?`<span onclick="event.stopPropagation();removePivotTab(${i})"
+        style="color:var(--muted);font-size:.75rem;cursor:pointer;margin-left:.15rem;transition:color .15s;"
+        onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--muted)'">✕</span>`:''}
+    </div>`).join('');
+}
+
+function switchPivotTab(pid){
+  PIVOT_PANELS.forEach((p,i)=>p.active=(i===pid));
+  renderPivotTabBar();
+  document.querySelectorAll('.pivot-panel').forEach((el,i)=>{
+    el.style.display=i===pid?'block':'none';
+  });
+}
+
+function addPivotTab(preset){
+  const pid = PIVOT_PANELS.length;
+  PIVOT_PANELS.push({
+    id:pid, active:false,
+    name: preset?preset.name:('Pivot '+(pid+1)),
+    row: preset?preset.row:(ALL_FIELDS[0]),
+    col: preset?preset.col:'',
+    agg: preset?preset.agg:'count',
+    fmt: preset?preset.fmt:'heat',
+    sort: preset?preset.sort:'total-desc',
+    topn: preset?preset.topn:0,
+    note: ''
+  });
+  const container = document.getElementById('pivot-panels-container');
+  const div = document.createElement('div');
+  div.innerHTML = makePivotPanelHTML(pid);
+  container.appendChild(div.firstElementChild);
+  switchPivotTab(pid);
+  renderPivotTabBar();
+  if(preset) setTimeout(()=>buildPivotPanel(pid), 50);
+}
+
+function removePivotTab(pid){
+  if(PIVOT_PANELS.length<=1)return;
+  PIVOT_PANELS.splice(pid,1);
+  // Re-index
+  PIVOT_PANELS.forEach((p,i)=>p.id=i);
+  const container = document.getElementById('pivot-panels-container');
+  container.innerHTML = '';
+  PIVOT_PANELS.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.innerHTML=makePivotPanelHTML(i);
+    container.appendChild(div.firstElementChild);
+  });
+  switchPivotTab(Math.min(pid, PIVOT_PANELS.length-1));
+}
+
+function loadPredefinedPivot(idx){
+  const preset = PREDEFINED_PIVOTS[idx];
+  if(!preset)return;
+  // Check if current active panel is empty (just built nothing yet)
+  const activePid = PIVOT_PANELS.findIndex(p=>p.active);
+  const activePanel = PIVOT_PANELS[activePid];
+  const resultEmpty = !document.getElementById(`pb-result-${activePid}`)?.innerHTML.trim();
+  if(activePid>=0 && resultEmpty){
+    // Reuse current tab
+    PIVOT_PANELS[activePid] = {...PIVOT_PANELS[activePid],...preset,id:activePid,active:true};
+    const container = document.getElementById('pivot-panels-container');
+    const panels = container.querySelectorAll('.pivot-panel');
+    if(panels[activePid]){
+      const div = document.createElement('div');
+      div.innerHTML = makePivotPanelHTML(activePid);
+      panels[activePid].replaceWith(div.firstElementChild);
+    }
+    renderPivotTabBar();
+    setTimeout(()=>buildPivotPanel(activePid),50);
+  } else {
+    addPivotTab(preset);
+  }
+}
+
+function initPivotBuilder(){
+  const container = document.getElementById('pivot-panels-container');
+  if(!container||PIVOT_PANELS.length>0)return;
+  PIVOT_PANELS.push({id:0,active:true,name:'Pivot 1',row:'Issue Type',col:'WHO',agg:'count',fmt:'heat',sort:'total-desc',topn:0,note:''});
+  const div=document.createElement('div');
+  div.innerHTML=makePivotPanelHTML(0);
+  container.appendChild(div.firstElementChild);
+  renderPivotTabBar();
+}
+
+function autoRebuild(pid){
+  // Read current select values into PIVOT_PANELS state
+  const p = PIVOT_PANELS[pid];
+  if(!p)return;
+  p.row = document.getElementById(`pb-row-${pid}`)?.value || p.row;
+  p.col = document.getElementById(`pb-col-${pid}`)?.value || '';
+  p.agg = document.getElementById(`pb-agg-${pid}`)?.value || 'count';
+  p.fmt = document.getElementById(`pb-fmt-${pid}`)?.value || 'none';
+  p.sort = document.getElementById(`pb-sort-${pid}`)?.value || 'total-desc';
+  p.topn = parseInt(document.getElementById(`pb-topn-${pid}`)?.value||'0');
+  buildPivotPanel(pid);
+}
+
+function getAggValue(row, agg, data){
+  // For a row array (tickets), return the aggregation value
+  switch(agg){
+    case 'count': return row.length;
+    case 'count_closed': return row.filter(isClosed).length;
+    case 'count_open': return row.filter(r=>!isClosed(r)).length;
+    case 'count_critical': return row.filter(r=>r['Priority']==='Critical').length;
+    case 'count_incident': return row.filter(r=>r['Issue Type']==='Incident').length;
+    case 'count_sr': return row.filter(r=>r['Issue Type']==='Service Request').length;
+    case 'pct_closed': return row.length?Math.round(row.filter(isClosed).length/row.length*100):0;
+    case 'pct_critical': return row.length?Math.round(row.filter(r=>r['Priority']==='Critical').length/row.length*100):0;
+    default: return row.length;
+  }
+}
+
+function getAggLabel(agg){
+  const labels={count:'Count',count_closed:'Closed',count_open:'Open',count_critical:'Critical',
+    count_incident:'Incidents',count_sr:'Service Req','pct_closed':'% Closed','pct_critical':'% Critical'};
+  return labels[agg]||'Count';
+}
+
+function buildPivotPanel(pid){
+  const p = PIVOT_PANELS[pid];
+  if(!p)return;
+  // Read current values
+  const rowF = document.getElementById(`pb-row-${pid}`)?.value || p.row;
+  const colF = document.getElementById(`pb-col-${pid}`)?.value || '';
+  const agg  = document.getElementById(`pb-agg-${pid}`)?.value || 'count';
+  const fmt  = document.getElementById(`pb-fmt-${pid}`)?.value || 'none';
+  const sort = document.getElementById(`pb-sort-${pid}`)?.value || 'total-desc';
+  const topn = parseInt(document.getElementById(`pb-topn-${pid}`)?.value||'0');
+  const note = document.getElementById(`pb-note-${pid}`)?.value||'';
+
+  // Update state
+  Object.assign(p, {row:rowF,col:colF,agg,fmt,sort,topn,note,name:colF?`${rowF} × ${colF}`:`${rowF} — ${getAggLabel(agg)}`});
+  // Update tab label
+  const tabLabel = document.getElementById(`ptab-label-${pid}`);
+  if(tabLabel) tabLabel.textContent = p.name;
+
+  const d = S.filtered;
+  const title = colF ? `${rowF} × ${colF} (${getAggLabel(agg)})` : `${rowF} — ${getAggLabel(agg)}`;
+  document.getElementById(`pb-title-${pid}`).innerHTML =
+    `<span>${title}</span><span id="pb-record-count-${pid}" style="font-size:.7rem;color:var(--muted);font-weight:400;">${d.length} records</span>`;
+
+  // Build data structure
+  const rowKeys = [...new Set(d.map(r=>r[rowF]).filter(v=>v&&v!=='-'&&v!=='Unknown'&&v!=='None'))];
+  const colKeys = colF ? [...new Set(d.map(r=>r[colF]).filter(v=>v&&v!=='-'&&v!=='Unknown'&&v!=='None'))].sort() : [];
+
+  // Build row map: rowKey -> {colKey -> [tickets]}
+  const rowMap = {};
+  rowKeys.forEach(rk=>{
+    rowMap[rk] = {};
+    if(colF) colKeys.forEach(ck=>{ rowMap[rk][ck]=[]; });
+    else rowMap[rk]['_all'] = [];
+  });
+  d.forEach(r=>{
+    const rk=r[rowF]||''; const ck=colF?r[colF]:'_all';
+    if(rowMap[rk]&&rowMap[rk][ck]!==undefined) rowMap[rk][ck].push(r);
+    else if(rowMap[rk]) { rowMap[rk][ck]=rowMap[rk][ck]||[]; rowMap[rk][ck].push(r); }
+  });
+
+  // Calculate row totals and sort
+  let rows = rowKeys.map(rk=>{
+    const allTickets = Object.values(rowMap[rk]).flat();
+    const total = getAggValue(allTickets, agg, d);
+    const colVals = colF ? Object.fromEntries(colKeys.map(ck=>[ck,getAggValue(rowMap[rk][ck]||[],agg,d)])) : {};
+    return {rk, total, colVals, allTickets};
+  });
+  // Sort
+  if(sort==='total-desc') rows.sort((a,b)=>b.total-a.total);
+  else if(sort==='total-asc') rows.sort((a,b)=>a.total-b.total);
+  else if(sort==='alpha-asc') rows.sort((a,b)=>a.rk.localeCompare(b.rk));
+  else if(sort==='alpha-desc') rows.sort((a,b)=>b.rk.localeCompare(a.rk));
+  // Top N
+  if(topn>0) rows=rows.slice(0,topn);
+
+  // Calculate grand totals
+  const grandTotal = getAggValue(d, agg, d);
+  const colGrandTotals = colF ? Object.fromEntries(colKeys.map(ck=>[ck, getAggValue(d.filter(r=>r[colF]===ck),agg,d)])) : {};
+  const maxVal = Math.max(...rows.map(r=>r.total),1);
+  const maxColVals = colF ? Object.fromEntries(colKeys.map(ck=>[ck,Math.max(...rows.map(r=>r.colVals[ck]||0),1)])) : {};
+
+  // Cell styling
+  function cellStyle(val, maxV){
+    if(fmt==='heat'){
+      const i=val/maxV;
+      return `background:rgba(0,212,255,${(i*.55).toFixed(2)});color:${i>.5?'#000':'var(--text)'}`;
+    }
+    if(fmt==='traffic'){
+      if(val===0) return '';
+      const i=val/maxV;
+      return i>.66?`background:rgba(239,68,68,.25);color:#f87171`:
+             i>.33?`background:rgba(245,158,11,.2);color:var(--accent4)`:
+                   `background:rgba(16,185,129,.15);color:var(--accent3)`;
+    }
+    if(fmt==='bar'){
+      const i=val/maxV;
+      const w=Math.round(i*100);
+      return `background:linear-gradient(to right,rgba(0,212,255,.3) ${w}%,transparent ${w}%)`;
+    }
+    return '';
+  }
+
+  // Build table HTML
+  const isPct = agg.startsWith('pct_');
+  const suffix = isPct?'%':'';
+  let html = `<table><thead><tr>
+    <th onclick="sortPivotCol(this,0)" style="min-width:120px;position:sticky;left:0;background:var(--surface2);z-index:1;">${rowF}</th>`;
+  if(colF){
+    colKeys.forEach((ck,ci)=>{
+      html+=`<th onclick="sortPivotCol(this,${ci+1})" style="text-align:right;white-space:nowrap;">${ck}</th>`;
+    });
+  }
+  html+=`<th onclick="sortPivotCol(this,${colF?colKeys.length+1:1})" style="text-align:right;font-weight:700;">${getAggLabel(agg)}</th>
+    <th style="text-align:right;color:var(--muted);font-weight:400;font-size:.65rem;">Share%</th>
+  </tr></thead><tbody>`;
+
+  rows.forEach(({rk,total,colVals,allTickets})=>{
+    const share = grandTotal?Math.round(total/grandTotal*100):0;
+    const rowEnc = rk.replace(/'/g,"\'");
+    html+=`<tr style="cursor:pointer" onclick="showDrillDown('${rowF}','${rowEnc}',${allTickets.length})">
+      <td style="font-weight:500;position:sticky;left:0;background:var(--surface);z-index:1;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;">${rk}</td>`;
+    if(colF){
+      colKeys.forEach(ck=>{
+        const v=colVals[ck]||0;
+        const cs=cellStyle(v, maxColVals[ck]);
+        html+=v>0?
+          `<td class="pivot-cell-click" style="text-align:right;${cs}" onclick="event.stopPropagation();showDualDrillDown('${rowF}','${rowEnc}','${colF}','${ck.replace(/'/g,"\'")}',${v})">${v}${suffix}</td>`:
+          `<td style="text-align:right;color:var(--muted);font-size:.7rem;">—</td>`;
+      });
+    }
+    html+=`<td style="text-align:right;font-weight:700;color:var(--accent);${cellStyle(total,maxVal)}">${total}${suffix}</td>
+      <td style="text-align:right;font-size:.7rem;color:var(--muted);">${share}%</td>
+    </tr>`;
+  });
+
+  // Grand total row
+  html+=`<tr class="total-row"><td style="position:sticky;left:0;background:var(--surface2);">Grand Total</td>`;
+  if(colF) colKeys.forEach(ck=>{ html+=`<td style="text-align:right;">${colGrandTotals[ck]||0}${suffix}</td>`; });
+  html+=`<td style="text-align:right;">${grandTotal}${suffix}</td><td style="text-align:right;font-size:.7rem;">100%</td></tr>`;
+  html+='</tbody></table>';
+
+  document.getElementById(`pb-result-${pid}`).innerHTML = html;
+  document.getElementById(`pb-chart-card-${pid}`).style.display='none';
+  saveSession();
+}
+
+function pivotPanelToChart(pid){
+  const p = PIVOT_PANELS[pid];
+  if(!p||!p.row){buildPivotPanel(pid);}
+  const rowF = p.row, colF = p.col, agg = p.agg;
+  const d = S.filtered;
+  const chartCard = document.getElementById(`pb-chart-card-${pid}`);
+  chartCard.style.display='block';
+  document.getElementById(`pb-chart-title-${pid}`).textContent = p.name;
+
+  const chartId = `pbChart-${pid}`;
+  if(S.charts[chartId]) S.charts[chartId].destroy();
+  const ctx = document.getElementById(chartId);
+  if(!ctx)return;
+
+  if(!colF){
+    const rowKeys = [...new Set(d.map(r=>r[rowF]).filter(v=>v&&v!=='-'&&v!=='None'))];
+    const vals = rowKeys.map(rk=>getAggValue(d.filter(r=>r[rowF]===rk), agg, d));
+    const topN = p.topn>0?p.topn:20;
+    const pairs = rowKeys.map((k,i)=>[k,vals[i]]).sort((a,b)=>b[1]-a[1]).slice(0,topN);
+    S.charts[chartId] = new Chart(ctx.getContext('2d'),{type:'bar',
+      data:{labels:pairs.map(x=>x[0]),datasets:[{data:pairs.map(x=>x[1]),
+        backgroundColor:getColors('mixed').map(c=>c+'cc'),borderColor:getColors('mixed'),borderWidth:1,borderRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        onClick:(evt,els)=>{if(els.length)showDrillDown(rowF,pairs[els[0].index][0],d.filter(r=>r[rowF]===pairs[els[0].index][0]).length);},
+        plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8b949e',font:{size:9},maxRotation:35},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'},beginAtZero:true}}}});
+  } else {
+    const colKeys = [...new Set(d.map(r=>r[colF]).filter(v=>v&&v!=='-'&&v!=='None'))].sort();
+    const rowKeys = [...new Set(d.map(r=>r[rowF]).filter(v=>v&&v!=='-'&&v!=='None'))];
+    const rowTotals = rowKeys.map(rk=>getAggValue(d.filter(r=>r[rowF]===rk),agg,d));
+    const topRows = rowKeys.map((k,i)=>[k,rowTotals[i]]).sort((a,b)=>b[1]-a[1]).slice(0,p.topn>0?p.topn:15);
+    const datasets = colKeys.map((ck,i)=>({
+      label:ck, borderRadius:3,
+      data:topRows.map(([rk])=>getAggValue(d.filter(r=>r[rowF]===rk&&r[colF]===ck),agg,d)),
+      backgroundColor:getColors('mixed')[i%10]+'cc',borderColor:getColors('mixed')[i%10],borderWidth:1
+    }));
+    S.charts[chartId]=new Chart(ctx.getContext('2d'),{type:'bar',
+      data:{labels:topRows.map(x=>x[0]),datasets},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:'#8b949e',font:{size:9}}}},
+        scales:{x:{ticks:{color:'#8b949e',font:{size:9},maxRotation:35},grid:{color:'#30363d'}},
+          y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'},beginAtZero:true}}}});
+  }
+}
+
+function copyPivotTable(pid){
+  const el=document.getElementById('pb-result-'+pid);
+  if(!el)return;
+  const rows=Array.from(el.querySelectorAll('tr')).map(tr=>
+    Array.from(tr.querySelectorAll('th,td')).map(c=>c.textContent.trim()).join('\t')
+  ).join('\n');
+  navigator.clipboard.writeText(rows).then(()=>showStatus('Table copied to clipboard ✓')).catch(()=>showStatus('Could not copy','warn'));
+}
+function exportPivotPanel(pid){
+  const p = PIVOT_PANELS[pid];
+  if(!p||!p.row){alert('Build pivot first');return;}
+  const d=S.filtered, rowF=p.row, colF=p.col, agg=p.agg;
+  const rowKeys=[...new Set(d.map(r=>r[rowF]).filter(v=>v&&v!=='-'))];
+  const colKeys=colF?[...new Set(d.map(r=>r[colF]).filter(v=>v&&v!=='-'))].sort():[];
+  const rows=[];
+  if(!colF){
+    rows.push([rowF,getAggLabel(agg),'Share%']);
+    rowKeys.forEach(rk=>{
+      const sub=d.filter(r=>r[rowF]===rk);
+      const v=getAggValue(sub,agg,d);
+      rows.push([rk,v,d.length?Math.round(v/d.length*100)+'%':'']);
+    });
+  } else {
+    rows.push([rowF,...colKeys,'Total']);
+    rowKeys.forEach(rk=>{
+      const sub=d.filter(r=>r[rowF]===rk);
+      rows.push([rk,...colKeys.map(ck=>getAggValue(d.filter(r=>r[rowF]===rk&&r[colF]===ck),agg,d)),getAggValue(sub,agg,d)]);
+    });
+  }
+  dlCSV(rows,`pivot_${rowF.replace(/\s/g,'_')}.csv`);
+}
 function buildPivot(){const rowF=$v('pb-row'),colF=$v('pb-col'),cf=$v('pb-condformat')||'none';_lastPivot={rowF,colF};document.getElementById('pb-title').textContent=colF?`${rowF} × ${colF}`:`Count by ${rowF}`;document.getElementById('pb-result').innerHTML=buildPivotHTML(S.filtered,rowF,colF||null,cf);document.getElementById('pb-chart-card').style.display='none';saveSession();}
 function pivotToChart(){if(!_lastPivot.rowF)buildPivot();const{rowF,colF}=_lastPivot;document.getElementById('pb-chart-card').style.display='block';document.getElementById('pb-chart-title').textContent=colF?`${rowF} × ${colF}`:`Count by ${rowF}`;if(!colF){const c=countBy(S.filtered,rowF);makeChart('pbChart','bar',Object.keys(c),Object.values(c),getColors('mixed'),{plugins:{legend:{display:false}}},rowF);}else{const cols=[...new Set(S.filtered.map(r=>r[colF]).filter(v=>v&&v!=='-'))].sort();const rowMap={};S.filtered.forEach(r=>{const rk=r[rowF]||'Unknown';if(!rowMap[rk])rowMap[rk]={};rowMap[rk][r[colF]||'Unknown']=(rowMap[rk][r[colF]||'Unknown']||0)+1;});const rowKeys=Object.keys(rowMap).slice(0,10);if(S.charts['pbChart'])S.charts['pbChart'].destroy();const ctx=document.getElementById('pbChart');if(!ctx)return;S.charts['pbChart']=new Chart(ctx.getContext('2d'),{type:'bar',data:{labels:rowKeys,datasets:cols.map((c,i)=>({label:c,data:rowKeys.map(rk=>rowMap[rk]?.[c]||0),backgroundColor:getColors('mixed')[i%10]+'bb',borderColor:getColors('mixed')[i%10],borderWidth:1,borderRadius:3}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8b949e',font:{size:9}}}},scales:{x:{ticks:{color:'#8b949e',font:{size:8}},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'},beginAtZero:true}}}});}}
 function exportPivotCSV(){if(!_lastPivot.rowF){alert('Build pivot first');return;}const{rowF,colF}=_lastPivot;const rows=[];if(!colF){const c=countBy(S.filtered,rowF);rows.push([rowF,'Count']);Object.entries(c).forEach(([k,v])=>rows.push([k,v]));}else{const cols=[...new Set(S.filtered.map(r=>r[colF]).filter(v=>v&&v!=='-'))].sort();rows.push([rowF,...cols,'Total']);const rm={};S.filtered.forEach(r=>{const rk=r[rowF]||'Unknown';if(!rm[rk])rm[rk]={};rm[rk][r[colF]||'Unknown']=(rm[rk][r[colF]||'Unknown']||0)+1;});Object.entries(rm).forEach(([rk,rv])=>{const t=Object.values(rv).reduce((s,v)=>s+v,0);rows.push([rk,...cols.map(c=>rv[c]||0),t]);});}dlCSV(rows,`pivot_${rowF.replace(/\s/g,'_')}.csv`);}
@@ -1923,12 +2453,11 @@ function showDrillDown(field,value,count){
   const CLOSED=new Set(['resolved with clarification','db script delivered','delivered',
     'release move to production','client release approval','client approval (db script)',
     'poc release approval','client hotfix testing','closed','done','resolved','fixed','complete','completed']);
-  const isCl=r=>CLOSED.has((r['Status']||'').toLowerCase().trim());
-  const incidents=rows.filter(r=>r['Issue Type']==='Incident');
+    const incidents=rows.filter(r=>r['Issue Type']==='Incident');
   const svcreqs=rows.filter(r=>r['Issue Type']==='Service Request');
-  const closedAll=rows.filter(isCl);
-  const incClosed=incidents.filter(isCl);
-  const srClosed=svcreqs.filter(isCl);
+  const closedAll=rows.filter(isClosed);
+  const incClosed=incidents.filter(isClosed);
+  const srClosed=svcreqs.filter(isClosed);
 
   const colorMap={'ENGG':'#00d4ff','HD':'#7c3aed','Critical':'#ef4444','High':'#f59e0b','Medium':'#10b981','Incident':'#ef4444','Service Request':'#a78bfa'};
   const sc=colorMap[value]||'#00d4ff';
@@ -1953,7 +2482,7 @@ function showDrillDown(field,value,count){
   // Ticket row builder
   const ticketRow=(r,showType=true)=>{
     const itIcon=r['Issue Type']==='Incident'?'🔴':r['Issue Type']==='Service Request'?'🔵':'';
-    const stClosed=isCl(r);
+    const stClosed=isClosed(r);
     const stColor=stClosed?'var(--accent3)':'var(--muted)';
     S._rows[r['Key']]=r;
     return`<div class="dq-ticket-item" onclick="safeDetail('${r['Key'].replace(/'/g,"\\'")}')">
@@ -2149,7 +2678,7 @@ function kpiDrillIssueType(value){
   const color=value==='Incident'?'#ef4444':'#a78bfa';
   const icon=value==='Incident'?'🔴':'🔵';
   const panel=document.getElementById('drill-panel');
-  const CLOSED=new Set(['resolved with clarification','db script delivered','delivered','release move to production','client release approval','client approval (db script)','poc release approval','client hotfix testing','closed','done','resolved','fixed','complete','completed']);
+  // uses global isClosed()
   const closed=rows.filter(r=>CLOSED.has((r['Status']||'').toLowerCase().trim())).length;
   const miniBar=(lbl,val,mx,clr)=>`<div style="margin-bottom:.45rem"><div style="display:flex;justify-content:space-between;font-size:.73rem;margin-bottom:2px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${lbl}</span><span style="color:${clr};font-weight:600">${val}</span></div><div style="height:4px;background:var(--border);border-radius:3px"><div style="height:100%;width:${mx?Math.round(val/mx*100):0}%;background:${clr};border-radius:3px"></div></div></div>`;
   const section=(title,data,clr)=>{const mx=Math.max(...Object.values(data),1);return`<div style="margin-bottom:1rem"><div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.5rem">${title}</div>${Object.entries(data).slice(0,7).map(([k,v])=>miniBar(k,v,mx,clr)).join('')}</div>`;};
@@ -2187,7 +2716,7 @@ let dragSrc=null;
 function initDragDrop(){document.querySelectorAll('.chart-card[draggable]').forEach(card=>{card.addEventListener('dragstart',e=>{dragSrc=card;card.classList.add('dragging');e.dataTransfer.effectAllowed='move';});card.addEventListener('dragend',()=>{card.classList.remove('dragging');document.querySelectorAll('.chart-card').forEach(c=>c.classList.remove('drag-over'));});card.addEventListener('dragover',e=>{e.preventDefault();if(card!==dragSrc)card.classList.add('drag-over');});card.addEventListener('dragleave',()=>card.classList.remove('drag-over'));card.addEventListener('drop',e=>{e.preventDefault();card.classList.remove('drag-over');if(dragSrc&&card!==dragSrc){const grid=document.getElementById('charts-grid');const cards=[...grid.children];const si=cards.indexOf(dragSrc),ti=cards.indexOf(card);si<ti?card.after(dragSrc):card.before(dragSrc);}});});}
 
 let _gsTimeout=null;
-function globalSearch(q){clearTimeout(_gsTimeout);const res=document.getElementById('global-search-results');if(!q||q.length<2){res.classList.remove('show');return;}_gsTimeout=setTimeout(()=>{const results=S.raw.filter(r=>[r['Key'],r['Summary'],r['Project'],r['Current Worker']].join(' ').toLowerCase().includes(q.toLowerCase())).slice(0,12);if(!results.length){res.innerHTML='<div class="gsr-item" style="color:var(--muted);">No results</div>';res.classList.add('show');return;}res.innerHTML=results.map(r=>`<div class="gsr-item" onclick="document.getElementById('global-search').value='';document.getElementById('global-search-results').classList.remove('show');safeDetail('${storeRow(r)}')"><span class="gsr-key">${r['Key']}</span><span class="gsr-summary">${r['Summary']||''}</span><div class="gsr-meta">${r['Project']||''} · ${r['Priority']||''} · ${r['WHO']||''}</div></div>`).join('');res.classList.add('show');},200);}
+function globalSearch(q){clearTimeout(_gsTimeout);const res=document.getElementById('global-search-results');if(!q||q.length<2){res.classList.remove('show');return;}_gsTimeout=setTimeout(()=>{const results=S.raw.filter(r=>[r['Key'],r['Summary'],r['Project'],r['Current Worker'],r['Root Cause'],r['Issue Type'],r['Priority']].join(' ').toLowerCase().includes(q.toLowerCase())).slice(0,12);if(!results.length){res.innerHTML='<div class="gsr-item" style="color:var(--muted);">No results</div>';res.classList.add('show');return;}res.innerHTML=results.map(r=>`<div class="gsr-item" onclick="document.getElementById('global-search').value='';document.getElementById('global-search-results').classList.remove('show');safeDetail('${storeRow(r)}')"><span class="gsr-key">${r['Key']}</span><span style="font-size:.6rem;margin:0 .2rem">${r['Issue Type']==='Incident'?'🔴':r['Issue Type']==='Service Request'?'🔵':''}</span><span class="gsr-summary">${r['Summary']||''}</span><div class="gsr-meta">${r['Project']||''} · ${r['Priority']||''} · ${r['WHO']||''} · ${r['Status']||''}</div></div>`).join('');res.classList.add('show');},200);}
 function gsKeyNav(e){if(e.key==='Escape'){document.getElementById('global-search-results').classList.remove('show');document.getElementById('global-search').blur();}}
 document.addEventListener('click',e=>{if(!e.target.closest('#global-search')&&!e.target.closest('#global-search-results'))document.getElementById('global-search-results').classList.remove('show');});
 window.addEventListener('scroll',()=>{const bar=document.getElementById('main-filter-bar');if(bar)bar.classList.toggle('stuck',window.scrollY>80);});
@@ -2222,7 +2751,7 @@ function runDataQuality(){
       mappedFields.map(f=>`<option value="${f}"${f===currentVal?' selected':''}>${f}</option>`).join('');
   }
   const extraField=extraSel&&extraSel.value?extraSel.value:null;
-  const reqFields=['Key','Root Cause','Priority','WHO','Current Worker','Project','Components'].filter(f=>f==='Key'||fieldAvailable(f));
+  const reqFields=['Key','Issue Type','Root Cause','Priority','WHO','Current Worker','Project','Components'].filter(f=>f==='Key'||fieldAvailable(f));
   if(extraField&&!reqFields.includes(extraField))reqFields.push(extraField);
   const issues=[];let score=100;
   reqFields.forEach(f=>{const miss=d.filter(r=>!r[f]||r[f]==='-'||r[f]==='Unknown');if(miss.length>0){const pct=Math.round(miss.length/d.length*100);issues.push({icon:'⚠',title:`Missing "${f}"`,desc:`${miss.length} records (${pct}%) have no ${f}.`,sev:pct>20?'high':pct>5?'medium':'low',field:f,tickets:miss});score-=Math.min(15,pct);}});
@@ -2309,7 +2838,7 @@ function toggleTheme(){document.body.classList.toggle('light');const l=document.
 function toggleCBMode(){S.cbMode=!S.cbMode;document.body.classList.toggle('cb-mode',S.cbMode);document.getElementById('cb-btn').style.opacity=S.cbMode?'1':'.6';renderOverviewCharts();renderAnalytics();showStatus(S.cbMode?'✅ Colour-blind mode on':'Colour-blind mode off');}
 
 const TAB_NAMES=['overview','analytics','pivots','charts','data','builder','comparator','quality','timeline','changelog'];
-function switchTab(name){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',TAB_NAMES[i]===name));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.getElementById('tab-'+name)?.classList.add('active');closeDrillDown();saveSession();if(name==='charts')renderCustomChart();if(name==='analytics')renderAnalytics();if(name==='builder'&&!_lastPivot.rowF)buildPivot();if(name==='comparator'&&S.compA.length&&S.compB.length)renderComparator();if(name==='timeline')renderCalendar();if(name==='changelog')renderChangelog();}
+function switchTab(name){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',TAB_NAMES[i]===name));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));document.getElementById('tab-'+name)?.classList.add('active');closeDrillDown();saveSession();if(name==='charts')renderCustomChart();if(name==='builder')initPivotBuilder();if(name==='analytics')renderAnalytics();if(name==='builder'&&!_lastPivot.rowF)buildPivot();if(name==='comparator'&&S.compA.length&&S.compB.length)renderComparator();if(name==='timeline')renderCalendar();if(name==='changelog')renderChangelog();}
 
 document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;if(e.key==='t'||e.key==='T'){toggleTheme();return;}if(e.key==='e'||e.key==='E'){document.getElementById('export-modal').classList.add('show');return;}if(e.key==='r'||e.key==='R'){resetFilters();return;}if(e.key==='/'||e.key==='f'){document.getElementById('global-search').focus();e.preventDefault();return;}if(e.key==='Escape'){closeDrillDown();closeInlineEdit();document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'));document.getElementById('fs-overlay').classList.remove('show');document.getElementById('global-search-results').classList.remove('show');document.getElementById('filter-history-drop').classList.remove('show');return;}if(e.key==='ArrowLeft'||e.key==='ArrowRight'){const tabs=document.querySelectorAll('.tab');const active=[...tabs].findIndex(t=>t.classList.contains('active'));const next=e.key==='ArrowLeft'?Math.max(0,active-1):Math.min(tabs.length-1,active+1);switchTab(TAB_NAMES[next]);return;}});
 function toggleShortcutHint(){const h=document.getElementById('shortcut-hint');h.classList.toggle('show');}
