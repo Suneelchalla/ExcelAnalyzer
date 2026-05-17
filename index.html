@@ -909,11 +909,20 @@ function processFile(file){
     if(fromCache){
       S.fieldMap=map;
       S.pendingParse={columns:headers,autoMap:map,savedKey,fileName:name,sheetCount};
-      applyMappingAndLaunch(data,name,sheetCount);
-      showStatus(`✅ Loaded ${data.length} records — field mapping restored`);
+      launchDashboard(name,sheetCount);
     }else{
       S.rawUnmapped=data;
-      showMappingScreen(headers,map,savedKey,name,sheetCount,data.length);
+      // If confidence >= 80%, auto-save mapping and launch directly
+      const mc=mappedCount(map);
+      const conf=Math.round(mc/Object.keys(CF).length*100);
+      if(conf>=80){
+        localStorage.setItem(savedKey,JSON.stringify(map));
+        S.fieldMap=map;
+        S.pendingParse={columns:headers,autoMap:map,savedKey,fileName:name,sheetCount};
+        launchDashboard(name,sheetCount);
+      } else {
+        showMappingScreen(headers,map,savedKey,name,sheetCount,data.length);
+      }
     }
     addRecentFile(name,data.length);
   });
@@ -1405,7 +1414,7 @@ function renderTrend(){
         showTicketListPanel(k,`${field} — ${matched.length} tickets`,matched);
       },
       plugins:{legend:{labels:{color:'#8b949e',font:{size:10}}}},
-      scales:{x:{ticks:{color:'#8b949e',font:{size:8}},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'},beginAtZero:true}}}};
+      scales:{x:{ticks:{color:'#8b949e',font:{size:8}},grid:{color:'#30363d'}},y:{ticks:{color:'#8b949e'},grid:{color:'#30363d'},beginAtZero:true}}}});
 }
 
 function renderHeatmap(){
