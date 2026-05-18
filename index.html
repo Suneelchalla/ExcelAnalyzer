@@ -350,6 +350,40 @@ tr.total-row td{background:var(--surface2);font-weight:600;color:var(--accent);b
 .closed-drill-meta{font-size:.66rem;color:var(--muted);white-space:nowrap}
 .ea-empty-state{margin:24px;padding:28px;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:linear-gradient(180deg,rgba(15,23,42,.88),rgba(2,6,23,.88));color:#cbd5e1;max-width:980px}.ea-empty-state h2{margin:0 0 10px;color:#fff;font-size:20px}.ea-empty-state p{margin:6px 0;line-height:1.55}.ea-empty-state .ea-muted{color:#94a3b8}.ea-empty-state .ea-chip{display:inline-block;margin-top:12px;padding:7px 10px;border-radius:999px;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.28);color:#67e8f9;font-size:12px}
 </style>
+
+<style id="excel-analyser-date-notice-styles">
+.ea-field-missing-notice{
+  margin:18px 0;
+  padding:20px 22px;
+  border:1px solid rgba(251,191,36,.35);
+  border-radius:16px;
+  background:rgba(251,191,36,.08);
+  color:#fef3c7;
+  box-shadow:0 10px 30px rgba(0,0,0,.14);
+}
+.ea-field-missing-notice h3{
+  margin:0 0 8px;
+  color:#fde68a;
+  font-size:17px;
+}
+.ea-field-missing-notice p{
+  margin:6px 0;
+  line-height:1.5;
+}
+.ea-field-missing-notice code{
+  padding:2px 6px;
+  border-radius:6px;
+  background:rgba(15,23,42,.7);
+  color:#fff7ed;
+}
+</style>
+
+
+<style id="ea-analytics-drilldown-css">
+.ea-clickable{cursor:pointer;transition:filter .12s ease,transform .12s ease}.ea-clickable:hover{filter:brightness(1.12)}
+.ea-empty-box{padding:18px;border:1px dashed var(--border);border-radius:12px;color:var(--muted);background:rgba(148,163,184,.06);font-size:.82rem}.ea-empty-box b{color:var(--text)}
+.ea-mini-note{font-size:.68rem;color:var(--muted);margin:.35rem 0 .65rem}.ea-date-chip{font-size:9px;fill:var(--muted)}
+</style>
 </head>
 <body>
 <div id="upload-screen">
@@ -2965,8 +2999,220 @@ function showTicketEditPopup(key,evt){const row=S.raw.find(r=>r['Key']===key);if
 
 async function exportPDF(){document.getElementById('export-modal').classList.remove('show');showStatus('⏳ Generating PDF…');switchTab('overview');await new Promise(r=>setTimeout(r,600));const{jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});pdf.setFillColor(13,17,23);pdf.rect(0,0,297,210,'F');pdf.setFont('helvetica','bold');pdf.setFontSize(24);pdf.setTextColor(0,212,255);pdf.text('Excel Analyser Dashboard v4',148,72,{align:'center'});pdf.setFontSize(12);pdf.setTextColor(139,148,158);pdf.text(`Generated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}`,148,88,{align:'center'});const cards=document.querySelectorAll('#tab-overview .chart-card');for(let i=0;i<Math.min(cards.length,8);i++){pdf.addPage();pdf.setFillColor(13,17,23);pdf.rect(0,0,297,210,'F');try{const c=await html2canvas(cards[i],{backgroundColor:'#161b22',scale:1.5,logging:false});const img=c.toDataURL('image/png');const w=270,h=Math.min(w*c.height/c.width,175);pdf.addImage(img,'PNG',13,18,w,h);}catch(e){console.warn(e);}}pdf.save('Excel_Analyser_v4.pdf');showStatus('✅ PDF exported!');}
 function exportExcel(){document.getElementById('export-modal').classList.remove('show');const wb=XLSX.utils.book_new(),d=S.filtered;const hd=d.filter(r=>r['WHO']==='HD').length,engg=d.filter(r=>r['WHO']==='ENGG').length;XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Excel Analyser v4'],['Generated',new Date().toLocaleDateString()],['Total',d.length],['HD',hd],['ENGG',engg],['Critical',d.filter(r=>r['Priority']==='Critical').length],['Projects',new Set(d.map(r=>r['Project']).filter(v=>v)).size]]),'Summary');[['Root Cause','WHO'],['Components','Root Cause'],['Priority','Type of Fix'],['Current Worker','WHO'],['Project','Root Cause']].forEach(([r,c])=>{const cols=[...new Set(d.map(x=>x[c]).filter(v=>v&&v!=='-'))].sort();const rm={};d.forEach(x=>{const rk=x[r]||'?';if(!rm[rk])rm[rk]={};rm[rk][x[c]||'?']=(rm[rk][x[c]||'?']||0)+1;});XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([[r,...cols,'Total'],...Object.entries(rm).map(([rk,rv])=>[rk,...cols.map(c2=>rv[c2]||0),Object.values(rv).reduce((s,v)=>s+v,0)])]),[`${r} x ${c}`.slice(0,31)]);});const cols=['Key','Summary','Project','Root Cause','Priority','WHO','Type of Fix','Current Worker','Components','Resolved','SVM In Charge'];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([cols,...d.map(r=>cols.map(c=>r[c]||''))]),'Raw Data');XLSX.writeFile(wb,'Excel_Analyser_v4.xlsx');showStatus('✅ Excel exported!');}
-function exportHTMLReport(){document.getElementById('export-modal').classList.remove('show');const d=S.filtered,tot=d.length,hd=d.filter(r=>r['WHO']==='HD').length,engg=d.filter(r=>r['WHO']==='ENGG').length,crit=d.filter(r=>r['Priority']==='Critical').length;const rc=countBy(d,'Root Cause'),proj=countBy(d,'Project'),date=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Excel Analyser</title><style>body{font-family:Arial,sans-serif;background:#f5f5f5;color:#333}table{width:100%;border-collapse:collapse;background:#fff;margin-bottom:1rem}th{background:#eee;padding:.5rem;text-align:left}td{padding:.45rem;border-top:1px solid #eee}</style></head><body><h1>Excel Analyser Report — ${date}</h1><p>Total: ${tot} · HD: ${hd} · ENGG: ${engg} · Critical: ${crit}</p><h2>Root Cause</h2><table><thead><tr><th>Root Cause</th><th>Count</th><th>%</th></tr></thead><tbody>${Object.entries(rc).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td><td>${Math.round(v/tot*100)}%</td></tr>`).join('')}</tbody></table>
+function exportHTMLReport(){document.getElementById('export-modal').classList.remove('show');const d=S.filtered,tot=d.length,hd=d.filter(r=>r['WHO']==='HD').length,engg=d.filter(r=>r['WHO']==='ENGG').length,crit=d.filter(r=>r['Priority']==='Critical').length;const rc=countBy(d,'Root Cause'),proj=countBy(d,'Project'),date=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Excel Analyser</title><style>body{font-family:Arial,sans-serif;background:#f5f5f5;color:#333}table{width:100%;border-collapse:collapse;background:#fff;margin-bottom:1rem}th{background:#eee;padding:.5rem;text-align:left}td{padding:.45rem;border-top:1px solid #eee}</style>
+<style id="ea-analytics-drilldown-css">
+.ea-clickable{cursor:pointer;transition:filter .12s ease,transform .12s ease}.ea-clickable:hover{filter:brightness(1.12)}
+.ea-empty-box{padding:18px;border:1px dashed var(--border);border-radius:12px;color:var(--muted);background:rgba(148,163,184,.06);font-size:.82rem}.ea-empty-box b{color:var(--text)}
+.ea-mini-note{font-size:.68rem;color:var(--muted);margin:.35rem 0 .65rem}.ea-date-chip{font-size:9px;fill:var(--muted)}
+</style>
+</head><body><h1>Excel Analyser Report — ${date}</h1><p>Total: ${tot} · HD: ${hd} · ENGG: ${engg} · Critical: ${crit}</p><h2>Root Cause</h2><table><thead><tr><th>Root Cause</th><th>Count</th><th>%</th></tr></thead><tbody>${Object.entries(rc).map(([k,v])=>`<tr><td>${k}</td><td>${v}</td><td>${Math.round(v/tot*100)}%</td></tr>`).join('')}</tbody></table>
 
+
+<script id="excel-analyser-date-field-guards">
+(function(){
+  const DATE_NOTICE_HTML = `
+    <div class="ea-field-missing-notice">
+      <h3>No valid date column found</h3>
+      <p>Please map <code>Created Date</code> or <code>Resolved Date</code> to generate this view.</p>
+      <p>Open the mapping/settings section, select the correct date columns from your Excel file, then reload or refresh the dashboard.</p>
+    </div>
+  `;
+
+  function getRows(){
+    if(window.state && Array.isArray(window.state.rows)) return window.state.rows;
+    if(Array.isArray(window.rows)) return window.rows;
+    if(Array.isArray(window.allRows)) return window.allRows;
+    if(Array.isArray(window.dataRows)) return window.dataRows;
+    return [];
+  }
+
+  function getMapping(){
+    return (window.state && window.state.mapping) ||
+           window.mapping ||
+           window.columnMap ||
+           window.fieldMap ||
+           {};
+  }
+
+  function normalizeName(v){
+    return String(v || "").toLowerCase().replace(/[^a-z0-9]/g,"");
+  }
+
+  function isDateLike(v){
+    if(v instanceof Date && !isNaN(v)) return true;
+    if(typeof v === "number" && v > 20000 && v < 70000) return true; // Excel serial date range
+    if(typeof v !== "string") return false;
+    const s = v.trim();
+    if(!s) return false;
+    const t = Date.parse(s);
+    return !Number.isNaN(t);
+  }
+
+  function hasUsableDateColumn(){
+    const rows = getRows();
+    if(!rows.length) return true; // no data loaded yet; do not show this error too early
+
+    const mapping = getMapping();
+    const mappedCandidates = [
+      mapping.created, mapping.createdDate, mapping.created_date, mapping.createDate,
+      mapping.resolved, mapping.resolvedDate, mapping.resolved_date, mapping.closedDate,
+      mapping.closed, mapping.updatedDate, mapping.updated, mapping.date
+    ].filter(Boolean);
+
+    const first = rows[0] || {};
+    const headers = Object.keys(first);
+    const headerCandidates = headers.filter(h => {
+      const n = normalizeName(h);
+      return n.includes("createddate") || n === "created" ||
+             n.includes("resolveddate") || n === "resolved" ||
+             n.includes("closeddate") || n === "closed" ||
+             n.includes("updateddate") || n === "updated" ||
+             n.endsWith("date");
+    });
+
+    const candidates = Array.from(new Set([...mappedCandidates, ...headerCandidates]));
+    return candidates.some(col => rows.slice(0, 50).some(r => isDateLike(r && r[col])));
+  }
+
+  function activeTabName(){
+    const active = Array.from(document.querySelectorAll(".active,[aria-selected='true']"))
+      .map(el => (el.textContent || "").toLowerCase())
+      .join(" ");
+    return active + " " + (location.hash || "").toLowerCase();
+  }
+
+  function visibleMainPanels(){
+    const root = document.querySelector("main") || document.querySelector("#app") || document.body;
+    return Array.from(root.querySelectorAll("section,.tab-pane,.tab-content > div,.view,.page,.panel,.card"))
+      .filter(el => {
+        const cs = getComputedStyle(el);
+        return cs.display !== "none" && cs.visibility !== "hidden" && el.offsetParent !== null;
+      });
+  }
+
+  function isBlankOrOnlyCanvas(el){
+    if(!el) return false;
+    const text = (el.textContent || "").replace(/\s+/g,"").trim();
+    const meaningfulChildren = Array.from(el.children).filter(ch => {
+      const tag = ch.tagName ? ch.tagName.toLowerCase() : "";
+      if(["canvas","svg"].includes(tag)) return false;
+      if(ch.classList && ch.classList.contains("ea-field-missing-notice")) return false;
+      return (ch.textContent || "").replace(/\s+/g,"").trim().length > 0 || ch.children.length > 0;
+    });
+    return text.length === 0 || meaningfulChildren.length === 0;
+  }
+
+  function applyDateNoticeIfNeeded(){
+    if(hasUsableDateColumn()) return;
+
+    const name = activeTabName();
+    const dateDependent = ["timeline","trend","aging","calendar","month","compare","closed","charts","overview"];
+    if(!dateDependent.some(k => name.includes(k))) return;
+
+    const panels = visibleMainPanels();
+    const target = panels.find(el => isBlankOrOnlyCanvas(el)) || panels[panels.length - 1];
+    if(target && !target.querySelector(".ea-field-missing-notice")){
+      target.innerHTML = DATE_NOTICE_HTML;
+    }
+  }
+
+  function patchFunction(name){
+    if(typeof window[name] !== "function" || window[name].__eaDateGuardWrapped) return;
+    const original = window[name];
+    window[name] = function(){
+      const result = original.apply(this, arguments);
+      setTimeout(applyDateNoticeIfNeeded, 50);
+      setTimeout(applyDateNoticeIfNeeded, 250);
+      return result;
+    };
+    window[name].__eaDateGuardWrapped = true;
+  }
+
+  [
+    "renderTimeline","renderTimelineTab","renderTrend","renderTrends","renderCharts",
+    "renderOverviewCharts","renderAging","renderCalendar","renderMonthCompare",
+    "renderCompare","renderClosed","renderClosedTab","applyFilters","renderAll"
+  ].forEach(patchFunction);
+
+  document.addEventListener("click", function(){
+    setTimeout(applyDateNoticeIfNeeded, 120);
+    setTimeout(applyDateNoticeIfNeeded, 400);
+  }, true);
+
+  window.addEventListener("hashchange", () => setTimeout(applyDateNoticeIfNeeded, 120));
+  window.addEventListener("load", () => setTimeout(applyDateNoticeIfNeeded, 500));
+  document.addEventListener("DOMContentLoaded", () => setTimeout(applyDateNoticeIfNeeded, 500));
+})();
+</script>
+
+
+<script id="ea-analytics-complete-fix">
+(function(){
+  function rows(){return (window.S&&Array.isArray(S.filtered)&&S.filtered.length?S.filtered:(window.S&&Array.isArray(S.raw)?S.raw:[]));}
+  function esc(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+  function q(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+  function pDate(v){if(!v)return null;if(v instanceof Date&&!isNaN(v))return v;if(typeof v==='number'){let d=new Date(Math.round((v-25569)*86400*1000));return isNaN(d)?null:d;}let d=new Date(v);return isNaN(d)?null:d;}
+  function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function niceDate(k){let d=new Date(k+'T00:00:00');return d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'});}
+  function show(title,sub,rs){if(typeof window.showTicketListPanel==='function')showTicketListPanel(title,sub,rs);else alert(title+'\n'+rs.length+' tickets');}
+  function countBy(arr,field){const o={};arr.forEach(r=>{const k=r[field]||'Unknown';o[k]=(o[k]||0)+1});return o;}
+  function topEntries(o,n=15){return Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,n)}
+  function empty(id,msg){const el=document.getElementById(id); if(el)el.innerHTML='<div class="ea-empty-box"><b>No data to display.</b><br>'+esc(msg)+'</div>';}
+  window.eaAnalyticsDrill=function(field,value,label){const rs=rows().filter(r=>String(r[field]||'Unknown')===String(value));show(label||field+' = '+value,rs.length+' tickets',rs)};
+  window.eaAnalyticsSubset=function(field,value,field2,value2,label){const rs=rows().filter(r=>String(r[field]||'Unknown')===String(value)&&String(r[field2]||'Unknown')===String(value2));show(label||value+' / '+value2,rs.length+' tickets',rs)};
+  window.eaDateDrill=function(key){const rs=rows().filter(r=>{const d=pDate(r.Created||r['Created Date']||r.Resolved||r['Resolved Date']);return d&&dateKey(d)===key});show(niceDate(key),rs.length+' tickets on '+key,rs)};
+  window.eaDayHourDrill=function(dow,hour){const names=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];const rs=rows().filter(r=>{const d=pDate(r.Created||r['Created Date']);return d&&((d.getDay()+6)%7)==dow&&d.getHours()==hour});show(names[dow]+' '+String(hour).padStart(2,'0')+':00',rs.length+' tickets',rs)};
+
+  window.renderHeatmap=function(){
+    const d=rows(), container=document.getElementById('heatmap-container'); if(!container)return;
+    const dated=d.map(r=>({r,dt:pDate(r.Created||r['Created Date']||r.Resolved||r['Resolved Date'])})).filter(x=>x.dt);
+    if(!dated.length){empty('heatmap-container','No valid Created Date or Resolved Date found. Please map a date column.');return;}
+    const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], hours=[...Array(24)].map((_,i)=>i), dh={}; days.forEach((_,i)=>{dh[i]={};hours.forEach(h=>dh[i][h]=0)});
+    const byDate={};
+    dated.forEach(x=>{let dow=(x.dt.getDay()+6)%7,h=x.dt.getHours(),k=dateKey(x.dt);dh[dow][h]++; if(!byDate[k])byDate[k]={total:0,inc:0,sr:0};byDate[k].total++; if(x.r['Issue Type']==='Incident')byDate[k].inc++; if(x.r['Issue Type']==='Service Request')byDate[k].sr++;});
+    const max=Math.max(1,...Object.values(dh).flatMap(o=>Object.values(o))); let html='<div class="ea-mini-note">Click any cell/bar to open matching ticket details. The first grid is weekday + hour; the second grid shows exact day/date.</div>';
+    const cw=31,ch=23,pl=52,pt=25; let svg=`<svg width="${pl+24*cw+10}" height="${pt+7*ch+10}" style="font-family:DM Sans,Arial;display:block;max-width:100%">`;
+    hours.forEach(h=>{if(h%3===0)svg+=`<text x="${pl+h*cw+cw/2}" y="15" text-anchor="middle" fill="#8b949e" font-size="9">${h}:00</text>`});
+    days.forEach((day,i)=>{let y=pt+i*ch;svg+=`<text x="${pl-7}" y="${y+15}" text-anchor="end" fill="#8b949e" font-size="10">${day}</text>`;hours.forEach(h=>{let v=dh[i][h],int=v/max,alpha=(.10+int*.88).toFixed(2),g=Math.round(180+60*int);svg+=`<rect class="ea-clickable" onclick="eaDayHourDrill(${i},${h})" x="${pl+h*cw}" y="${y}" width="${cw-2}" height="${ch-2}" rx="3" fill="rgba(0,212,255,${alpha})" stroke="#94a3b8" stroke-width=".35"><title>${day} ${h}:00 - ${v} tickets</title></rect>`; if(v)svg+=`<text pointer-events="none" x="${pl+h*cw+cw/2}" y="${y+15}" text-anchor="middle" fill="${int>.55?'#06121f':'#334155'}" font-size="9">${v}</text>`;})}); svg+='</svg>';
+    html+=`<div style="margin-bottom:1rem"><div style="font-weight:700;font-size:.75rem;margin-bottom:.35rem;color:var(--muted)">Ticket volume by weekday and hour</div>${svg}</div>`;
+    const keys=Object.keys(byDate).sort(), maxD=Math.max(1,...keys.map(k=>byDate[k].total));
+    html+='<div style="font-weight:700;font-size:.75rem;margin-bottom:.35rem;color:var(--muted)">Daily ticket count by exact date</div><div style="display:flex;align-items:flex-end;gap:5px;min-height:128px;overflow-x:auto;padding:6px 4px 28px">';
+    keys.forEach(k=>{let v=byDate[k],h=Math.max(8,Math.round(v.total/maxD*82));html+=`<div class="ea-clickable" onclick="eaDateDrill('${k}')" title="${niceDate(k)}: ${v.total} tickets (${v.inc} Inc, ${v.sr} SR)" style="width:38px;flex:0 0 38px;text-align:center"><div style="height:${h}px;background:linear-gradient(to top,#ef4444,#00d4ff);border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--muted);line-height:1.1;margin-top:4px">${niceDate(k).replace(' ','<br>')}</div><div style="font-size:9px;font-weight:700;color:var(--text)">${v.total}</div></div>`});
+    html+='</div>'; container.innerHTML=html;
+  };
+
+  window.renderAgentLeaderboard=function(){
+    const el=document.getElementById('agent-table'); if(!el)return; const d=rows();
+    const workerField=['Current Worker','Assignee','Worker','Agent','Resolved By'].find(f=>d.some(r=>r[f]&&r[f]!=='-'));
+    if(!workerField){empty('agent-table','No agent/worker column found. Map Current Worker, Assignee, Worker, or Agent.');return;}
+    const arr=topEntries(countBy(d,workerField),30); if(!arr.length){empty('agent-table','No worker data available.');return;}
+    let html='<table><thead><tr><th>#</th><th>Agent</th><th>Total</th><th>Incident</th><th>Service Request</th><th>Critical</th></tr></thead><tbody>';
+    arr.forEach(([w,total],i)=>{const sub=d.filter(r=>String(r[workerField]||'Unknown')===String(w)),inc=sub.filter(r=>r['Issue Type']==='Incident').length,sr=sub.filter(r=>r['Issue Type']==='Service Request').length,crit=sub.filter(r=>r.Priority==='Critical').length;html+=`<tr class="ea-clickable" onclick="eaAnalyticsDrill('${q(workerField)}','${q(w)}','Agent: ${q(w)}')"><td>${i+1}</td><td style="color:var(--accent);font-weight:700">${esc(w)}</td><td><b>${total}</b></td><td onclick="event.stopPropagation();eaAnalyticsSubset('${q(workerField)}','${q(w)}','Issue Type','Incident','${q(w)} - Incidents')">${inc}</td><td onclick="event.stopPropagation();eaAnalyticsSubset('${q(workerField)}','${q(w)}','Issue Type','Service Request','${q(w)} - Service Requests')">${sr}</td><td>${crit?'<span class="badge badge-critical">'+crit+'</span>':'-'}</td></tr>`});
+    el.innerHTML=html+'</tbody></table>';
+  };
+
+  function makeSimpleBar(containerId,title,field,limit){const el=document.getElementById(containerId); if(!el)return; const d=rows(); if(!d.length){empty(containerId,'Upload Excel data to view '+title);return;} const arr=topEntries(countBy(d,field),limit||15).filter(([k])=>k&&k!=='Unknown'); if(!arr.length){empty(containerId,'Column not mapped or no values found for '+field+'.');return;} const max=Math.max(...arr.map(x=>x[1]),1); let html='<div style="padding:12px 14px"><div class="ea-mini-note">Click any row to deep dive into matching tickets.</div>'; arr.forEach(([k,v])=>{html+=`<div class="ea-clickable" onclick="eaAnalyticsDrill('${q(field)}','${q(k)}','${q(title)}: ${q(k)}')" style="display:grid;grid-template-columns:220px 1fr 42px;align-items:center;gap:10px;margin:8px 0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:.78rem">${esc(k)}</div><div style="height:16px;background:rgba(148,163,184,.18);border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.round(v/max*100)}%;background:linear-gradient(90deg,#00d4ff,#7c3aed);border-radius:999px"></div></div><b style="color:var(--accent)">${v}</b></div>`}); el.innerHTML=html+'</div>';}
+
+  function ensureCanvasCard(canvasId,title,afterId){let c=document.getElementById(canvasId); if(c)return c; const anchor=document.getElementById(afterId)||document.getElementById('hist-container')||document.getElementById('agent-table'); if(!anchor)return null; const sec=document.createElement('div'); sec.className='analytics-section'; sec.innerHTML=`<div class="section-title">${title}</div><div class="chart-card wide"><div class="chart-wrap tall"><canvas id="${canvasId}"></canvas></div></div>`; anchor.closest('.analytics-section')?.after(sec); return document.getElementById(canvasId);}
+  function chartOrBars(){
+    makeSimpleBar('svm-fallback','SVM In-Charge Breakdown','SVM In Charge',20);
+  }
+  window.renderSVMChart=function(){
+    const c=document.getElementById('svmChart'); if(c && window.Chart){const d=rows(), arr=topEntries(countBy(d,'SVM In Charge'),12).filter(([k])=>k&&k!=='Unknown'); if(arr.length){if(S.charts['svmChart'])S.charts['svmChart'].destroy();S.charts['svmChart']=new Chart(c.getContext('2d'),{type:'bar',data:{labels:arr.map(x=>x[0]),datasets:[{label:'Tickets',data:arr.map(x=>x[1]),backgroundColor:'rgba(0,212,255,.7)',borderColor:'#00d4ff',borderWidth:1,borderRadius:5}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length)eaAnalyticsDrill('SVM In Charge',arr[els[0].index][0],'SVM: '+arr[els[0].index][0])},plugins:{legend:{display:false}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});return;}}
+    let host=document.getElementById('svmChart')?.parentElement; if(host)host.innerHTML='<div id="svm-fallback"></div>'; makeSimpleBar('svm-fallback','SVM In-Charge Breakdown','SVM In Charge',20);
+  };
+  window.renderIssueTypeTrend=function(){
+    const c=ensureCanvasCard('issueTypeTrendChart','🔴🔵 Incident vs Service Request — Trend Over Time','hist-container'); if(!c||!window.Chart)return; const d=rows(), dated=d.map(r=>({r,dt:pDate(r.Created||r['Created Date']||r.Resolved||r['Resolved Date'])})).filter(x=>x.dt); if(!dated.length){c.parentElement.innerHTML='<div class="ea-empty-box"><b>No valid date column found.</b><br>Please map Created Date or Resolved Date.</div>';return;} const keys=[...new Set(dated.map(x=>dateKey(x.dt)))].sort(); const inc=keys.map(k=>dated.filter(x=>dateKey(x.dt)===k&&x.r['Issue Type']==='Incident').length), sr=keys.map(k=>dated.filter(x=>dateKey(x.dt)===k&&x.r['Issue Type']==='Service Request').length); if(S.charts['issueTypeTrendChart'])S.charts['issueTypeTrendChart'].destroy();S.charts['issueTypeTrendChart']=new Chart(c.getContext('2d'),{type:'bar',data:{labels:keys,datasets:[{label:'Incident',data:inc,backgroundColor:'rgba(239,68,68,.7)'},{label:'Service Request',data:sr,backgroundColor:'rgba(124,58,237,.7)'}]},options:{responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(!els.length)return;let type=els[0].datasetIndex===0?'Incident':'Service Request',k=keys[els[0].index];let rs=dated.filter(x=>dateKey(x.dt)===k&&x.r['Issue Type']===type).map(x=>x.r);show(type+' - '+niceDate(k),rs.length+' tickets',rs)},plugins:{legend:{labels:{color:'#8b949e'}}},scales:{x:{ticks:{color:'#8b949e',maxRotation:45}},y:{beginAtZero:true,ticks:{color:'#8b949e'}}}}});
+  };
+  window.renderIssueTypeByProject=function(){
+    const c=ensureCanvasCard('issueTypeProjectChart','🔴🔵 Issue Type Breakdown by Project','issueTypeTrendChart'); if(!c||!window.Chart)return; const d=rows(), projects=topEntries(countBy(d,'Project'),15).map(x=>x[0]).filter(k=>k&&k!=='Unknown'); if(!projects.length){c.parentElement.innerHTML='<div class="ea-empty-box"><b>No project column/value found.</b><br>Please map Project to see this breakdown.</div>';return;} const inc=projects.map(p=>d.filter(r=>r.Project===p&&r['Issue Type']==='Incident').length), sr=projects.map(p=>d.filter(r=>r.Project===p&&r['Issue Type']==='Service Request').length); if(S.charts['issueTypeProjectChart'])S.charts['issueTypeProjectChart'].destroy();S.charts['issueTypeProjectChart']=new Chart(c.getContext('2d'),{type:'bar',data:{labels:projects,datasets:[{label:'Incident',data:inc,backgroundColor:'rgba(239,68,68,.7)'},{label:'Service Request',data:sr,backgroundColor:'rgba(124,58,237,.7)'}]},options:{responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(!els.length)return;let p=projects[els[0].index],type=els[0].datasetIndex===0?'Incident':'Service Request';eaAnalyticsSubset('Project',p,'Issue Type',type,p+' - '+type)},plugins:{legend:{labels:{color:'#8b949e'}}},scales:{x:{ticks:{color:'#8b949e',maxRotation:35}},y:{beginAtZero:true,ticks:{color:'#8b949e'}}}}});
+  };
+  const oldRenderAnalytics=window.renderAnalytics;
+  window.renderAnalytics=function(){try{if(typeof oldRenderAnalytics==='function')oldRenderAnalytics();}catch(e){console.warn('Original analytics render skipped',e)} setTimeout(()=>{try{renderHeatmap();renderAgentLeaderboard();renderIssueTypeTrend();renderIssueTypeByProject();renderSVMChart();}catch(e){console.error('Analytics fallback failed',e)}},60)};
+  document.addEventListener('click',function(e){const t=(e.target&&e.target.textContent||'').toLowerCase(); if(t.includes('analytics'))setTimeout(()=>window.renderAnalytics&&window.renderAnalytics(),150)},true);
+  window.addEventListener('load',()=>setTimeout(()=>{if((document.querySelector('.active')?.textContent||'').toLowerCase().includes('analytics'))window.renderAnalytics&&window.renderAnalytics()},800));
+})();
+</script>
 </body></html>`;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download=`HD_Report_${date.replace(/ /g,'_')}.html`;a.click();showStatus('✅ HTML report exported!');}
 function exportCSV(){document.getElementById('export-modal').classList.remove('show');exportCurrentCSV();}
 function exportCurrentCSV(){const cols=['Key','Summary','Project','Root Cause','Priority','WHO','Type of Fix','Current Worker','Components','Resolved'];dlCSV([cols,...S.filtered.map(r=>cols.map(c=>`"${(r[c]||'').replace(/"/g,'""')}"`))],'HD_filtered.csv');}
@@ -3564,5 +3810,73 @@ initDragDrop();
 })();
 </script>
 
+
+<script id="ea-analytics-complete-fix">
+(function(){
+  function rows(){return (window.S&&Array.isArray(S.filtered)&&S.filtered.length?S.filtered:(window.S&&Array.isArray(S.raw)?S.raw:[]));}
+  function esc(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+  function q(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+  function pDate(v){if(!v)return null;if(v instanceof Date&&!isNaN(v))return v;if(typeof v==='number'){let d=new Date(Math.round((v-25569)*86400*1000));return isNaN(d)?null:d;}let d=new Date(v);return isNaN(d)?null:d;}
+  function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  function niceDate(k){let d=new Date(k+'T00:00:00');return d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'});}
+  function show(title,sub,rs){if(typeof window.showTicketListPanel==='function')showTicketListPanel(title,sub,rs);else alert(title+'\n'+rs.length+' tickets');}
+  function countBy(arr,field){const o={};arr.forEach(r=>{const k=r[field]||'Unknown';o[k]=(o[k]||0)+1});return o;}
+  function topEntries(o,n=15){return Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,n)}
+  function empty(id,msg){const el=document.getElementById(id); if(el)el.innerHTML='<div class="ea-empty-box"><b>No data to display.</b><br>'+esc(msg)+'</div>';}
+  window.eaAnalyticsDrill=function(field,value,label){const rs=rows().filter(r=>String(r[field]||'Unknown')===String(value));show(label||field+' = '+value,rs.length+' tickets',rs)};
+  window.eaAnalyticsSubset=function(field,value,field2,value2,label){const rs=rows().filter(r=>String(r[field]||'Unknown')===String(value)&&String(r[field2]||'Unknown')===String(value2));show(label||value+' / '+value2,rs.length+' tickets',rs)};
+  window.eaDateDrill=function(key){const rs=rows().filter(r=>{const d=pDate(r.Created||r['Created Date']||r.Resolved||r['Resolved Date']);return d&&dateKey(d)===key});show(niceDate(key),rs.length+' tickets on '+key,rs)};
+  window.eaDayHourDrill=function(dow,hour){const names=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];const rs=rows().filter(r=>{const d=pDate(r.Created||r['Created Date']);return d&&((d.getDay()+6)%7)==dow&&d.getHours()==hour});show(names[dow]+' '+String(hour).padStart(2,'0')+':00',rs.length+' tickets',rs)};
+
+  window.renderHeatmap=function(){
+    const d=rows(), container=document.getElementById('heatmap-container'); if(!container)return;
+    const dated=d.map(r=>({r,dt:pDate(r.Created||r['Created Date']||r.Resolved||r['Resolved Date'])})).filter(x=>x.dt);
+    if(!dated.length){empty('heatmap-container','No valid Created Date or Resolved Date found. Please map a date column.');return;}
+    const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], hours=[...Array(24)].map((_,i)=>i), dh={}; days.forEach((_,i)=>{dh[i]={};hours.forEach(h=>dh[i][h]=0)});
+    const byDate={};
+    dated.forEach(x=>{let dow=(x.dt.getDay()+6)%7,h=x.dt.getHours(),k=dateKey(x.dt);dh[dow][h]++; if(!byDate[k])byDate[k]={total:0,inc:0,sr:0};byDate[k].total++; if(x.r['Issue Type']==='Incident')byDate[k].inc++; if(x.r['Issue Type']==='Service Request')byDate[k].sr++;});
+    const max=Math.max(1,...Object.values(dh).flatMap(o=>Object.values(o))); let html='<div class="ea-mini-note">Click any cell/bar to open matching ticket details. The first grid is weekday + hour; the second grid shows exact day/date.</div>';
+    const cw=31,ch=23,pl=52,pt=25; let svg=`<svg width="${pl+24*cw+10}" height="${pt+7*ch+10}" style="font-family:DM Sans,Arial;display:block;max-width:100%">`;
+    hours.forEach(h=>{if(h%3===0)svg+=`<text x="${pl+h*cw+cw/2}" y="15" text-anchor="middle" fill="#8b949e" font-size="9">${h}:00</text>`});
+    days.forEach((day,i)=>{let y=pt+i*ch;svg+=`<text x="${pl-7}" y="${y+15}" text-anchor="end" fill="#8b949e" font-size="10">${day}</text>`;hours.forEach(h=>{let v=dh[i][h],int=v/max,alpha=(.10+int*.88).toFixed(2),g=Math.round(180+60*int);svg+=`<rect class="ea-clickable" onclick="eaDayHourDrill(${i},${h})" x="${pl+h*cw}" y="${y}" width="${cw-2}" height="${ch-2}" rx="3" fill="rgba(0,212,255,${alpha})" stroke="#94a3b8" stroke-width=".35"><title>${day} ${h}:00 - ${v} tickets</title></rect>`; if(v)svg+=`<text pointer-events="none" x="${pl+h*cw+cw/2}" y="${y+15}" text-anchor="middle" fill="${int>.55?'#06121f':'#334155'}" font-size="9">${v}</text>`;})}); svg+='</svg>';
+    html+=`<div style="margin-bottom:1rem"><div style="font-weight:700;font-size:.75rem;margin-bottom:.35rem;color:var(--muted)">Ticket volume by weekday and hour</div>${svg}</div>`;
+    const keys=Object.keys(byDate).sort(), maxD=Math.max(1,...keys.map(k=>byDate[k].total));
+    html+='<div style="font-weight:700;font-size:.75rem;margin-bottom:.35rem;color:var(--muted)">Daily ticket count by exact date</div><div style="display:flex;align-items:flex-end;gap:5px;min-height:128px;overflow-x:auto;padding:6px 4px 28px">';
+    keys.forEach(k=>{let v=byDate[k],h=Math.max(8,Math.round(v.total/maxD*82));html+=`<div class="ea-clickable" onclick="eaDateDrill('${k}')" title="${niceDate(k)}: ${v.total} tickets (${v.inc} Inc, ${v.sr} SR)" style="width:38px;flex:0 0 38px;text-align:center"><div style="height:${h}px;background:linear-gradient(to top,#ef4444,#00d4ff);border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--muted);line-height:1.1;margin-top:4px">${niceDate(k).replace(' ','<br>')}</div><div style="font-size:9px;font-weight:700;color:var(--text)">${v.total}</div></div>`});
+    html+='</div>'; container.innerHTML=html;
+  };
+
+  window.renderAgentLeaderboard=function(){
+    const el=document.getElementById('agent-table'); if(!el)return; const d=rows();
+    const workerField=['Current Worker','Assignee','Worker','Agent','Resolved By'].find(f=>d.some(r=>r[f]&&r[f]!=='-'));
+    if(!workerField){empty('agent-table','No agent/worker column found. Map Current Worker, Assignee, Worker, or Agent.');return;}
+    const arr=topEntries(countBy(d,workerField),30); if(!arr.length){empty('agent-table','No worker data available.');return;}
+    let html='<table><thead><tr><th>#</th><th>Agent</th><th>Total</th><th>Incident</th><th>Service Request</th><th>Critical</th></tr></thead><tbody>';
+    arr.forEach(([w,total],i)=>{const sub=d.filter(r=>String(r[workerField]||'Unknown')===String(w)),inc=sub.filter(r=>r['Issue Type']==='Incident').length,sr=sub.filter(r=>r['Issue Type']==='Service Request').length,crit=sub.filter(r=>r.Priority==='Critical').length;html+=`<tr class="ea-clickable" onclick="eaAnalyticsDrill('${q(workerField)}','${q(w)}','Agent: ${q(w)}')"><td>${i+1}</td><td style="color:var(--accent);font-weight:700">${esc(w)}</td><td><b>${total}</b></td><td onclick="event.stopPropagation();eaAnalyticsSubset('${q(workerField)}','${q(w)}','Issue Type','Incident','${q(w)} - Incidents')">${inc}</td><td onclick="event.stopPropagation();eaAnalyticsSubset('${q(workerField)}','${q(w)}','Issue Type','Service Request','${q(w)} - Service Requests')">${sr}</td><td>${crit?'<span class="badge badge-critical">'+crit+'</span>':'-'}</td></tr>`});
+    el.innerHTML=html+'</tbody></table>';
+  };
+
+  function makeSimpleBar(containerId,title,field,limit){const el=document.getElementById(containerId); if(!el)return; const d=rows(); if(!d.length){empty(containerId,'Upload Excel data to view '+title);return;} const arr=topEntries(countBy(d,field),limit||15).filter(([k])=>k&&k!=='Unknown'); if(!arr.length){empty(containerId,'Column not mapped or no values found for '+field+'.');return;} const max=Math.max(...arr.map(x=>x[1]),1); let html='<div style="padding:12px 14px"><div class="ea-mini-note">Click any row to deep dive into matching tickets.</div>'; arr.forEach(([k,v])=>{html+=`<div class="ea-clickable" onclick="eaAnalyticsDrill('${q(field)}','${q(k)}','${q(title)}: ${q(k)}')" style="display:grid;grid-template-columns:220px 1fr 42px;align-items:center;gap:10px;margin:8px 0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:.78rem">${esc(k)}</div><div style="height:16px;background:rgba(148,163,184,.18);border-radius:999px;overflow:hidden"><div style="height:100%;width:${Math.round(v/max*100)}%;background:linear-gradient(90deg,#00d4ff,#7c3aed);border-radius:999px"></div></div><b style="color:var(--accent)">${v}</b></div>`}); el.innerHTML=html+'</div>';}
+
+  function ensureCanvasCard(canvasId,title,afterId){let c=document.getElementById(canvasId); if(c)return c; const anchor=document.getElementById(afterId)||document.getElementById('hist-container')||document.getElementById('agent-table'); if(!anchor)return null; const sec=document.createElement('div'); sec.className='analytics-section'; sec.innerHTML=`<div class="section-title">${title}</div><div class="chart-card wide"><div class="chart-wrap tall"><canvas id="${canvasId}"></canvas></div></div>`; anchor.closest('.analytics-section')?.after(sec); return document.getElementById(canvasId);}
+  function chartOrBars(){
+    makeSimpleBar('svm-fallback','SVM In-Charge Breakdown','SVM In Charge',20);
+  }
+  window.renderSVMChart=function(){
+    const c=document.getElementById('svmChart'); if(c && window.Chart){const d=rows(), arr=topEntries(countBy(d,'SVM In Charge'),12).filter(([k])=>k&&k!=='Unknown'); if(arr.length){if(S.charts['svmChart'])S.charts['svmChart'].destroy();S.charts['svmChart']=new Chart(c.getContext('2d'),{type:'bar',data:{labels:arr.map(x=>x[0]),datasets:[{label:'Tickets',data:arr.map(x=>x[1]),backgroundColor:'rgba(0,212,255,.7)',borderColor:'#00d4ff',borderWidth:1,borderRadius:5}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(els.length)eaAnalyticsDrill('SVM In Charge',arr[els[0].index][0],'SVM: '+arr[els[0].index][0])},plugins:{legend:{display:false}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:10}}}}}});return;}}
+    let host=document.getElementById('svmChart')?.parentElement; if(host)host.innerHTML='<div id="svm-fallback"></div>'; makeSimpleBar('svm-fallback','SVM In-Charge Breakdown','SVM In Charge',20);
+  };
+  window.renderIssueTypeTrend=function(){
+    const c=ensureCanvasCard('issueTypeTrendChart','🔴🔵 Incident vs Service Request — Trend Over Time','hist-container'); if(!c||!window.Chart)return; const d=rows(), dated=d.map(r=>({r,dt:pDate(r.Created||r['Created Date']||r.Resolved||r['Resolved Date'])})).filter(x=>x.dt); if(!dated.length){c.parentElement.innerHTML='<div class="ea-empty-box"><b>No valid date column found.</b><br>Please map Created Date or Resolved Date.</div>';return;} const keys=[...new Set(dated.map(x=>dateKey(x.dt)))].sort(); const inc=keys.map(k=>dated.filter(x=>dateKey(x.dt)===k&&x.r['Issue Type']==='Incident').length), sr=keys.map(k=>dated.filter(x=>dateKey(x.dt)===k&&x.r['Issue Type']==='Service Request').length); if(S.charts['issueTypeTrendChart'])S.charts['issueTypeTrendChart'].destroy();S.charts['issueTypeTrendChart']=new Chart(c.getContext('2d'),{type:'bar',data:{labels:keys,datasets:[{label:'Incident',data:inc,backgroundColor:'rgba(239,68,68,.7)'},{label:'Service Request',data:sr,backgroundColor:'rgba(124,58,237,.7)'}]},options:{responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(!els.length)return;let type=els[0].datasetIndex===0?'Incident':'Service Request',k=keys[els[0].index];let rs=dated.filter(x=>dateKey(x.dt)===k&&x.r['Issue Type']===type).map(x=>x.r);show(type+' - '+niceDate(k),rs.length+' tickets',rs)},plugins:{legend:{labels:{color:'#8b949e'}}},scales:{x:{ticks:{color:'#8b949e',maxRotation:45}},y:{beginAtZero:true,ticks:{color:'#8b949e'}}}}});
+  };
+  window.renderIssueTypeByProject=function(){
+    const c=ensureCanvasCard('issueTypeProjectChart','🔴🔵 Issue Type Breakdown by Project','issueTypeTrendChart'); if(!c||!window.Chart)return; const d=rows(), projects=topEntries(countBy(d,'Project'),15).map(x=>x[0]).filter(k=>k&&k!=='Unknown'); if(!projects.length){c.parentElement.innerHTML='<div class="ea-empty-box"><b>No project column/value found.</b><br>Please map Project to see this breakdown.</div>';return;} const inc=projects.map(p=>d.filter(r=>r.Project===p&&r['Issue Type']==='Incident').length), sr=projects.map(p=>d.filter(r=>r.Project===p&&r['Issue Type']==='Service Request').length); if(S.charts['issueTypeProjectChart'])S.charts['issueTypeProjectChart'].destroy();S.charts['issueTypeProjectChart']=new Chart(c.getContext('2d'),{type:'bar',data:{labels:projects,datasets:[{label:'Incident',data:inc,backgroundColor:'rgba(239,68,68,.7)'},{label:'Service Request',data:sr,backgroundColor:'rgba(124,58,237,.7)'}]},options:{responsive:true,maintainAspectRatio:false,onClick:(e,els)=>{if(!els.length)return;let p=projects[els[0].index],type=els[0].datasetIndex===0?'Incident':'Service Request';eaAnalyticsSubset('Project',p,'Issue Type',type,p+' - '+type)},plugins:{legend:{labels:{color:'#8b949e'}}},scales:{x:{ticks:{color:'#8b949e',maxRotation:35}},y:{beginAtZero:true,ticks:{color:'#8b949e'}}}}});
+  };
+  const oldRenderAnalytics=window.renderAnalytics;
+  window.renderAnalytics=function(){try{if(typeof oldRenderAnalytics==='function')oldRenderAnalytics();}catch(e){console.warn('Original analytics render skipped',e)} setTimeout(()=>{try{renderHeatmap();renderAgentLeaderboard();renderIssueTypeTrend();renderIssueTypeByProject();renderSVMChart();}catch(e){console.error('Analytics fallback failed',e)}},60)};
+  document.addEventListener('click',function(e){const t=(e.target&&e.target.textContent||'').toLowerCase(); if(t.includes('analytics'))setTimeout(()=>window.renderAnalytics&&window.renderAnalytics(),150)},true);
+  window.addEventListener('load',()=>setTimeout(()=>{if((document.querySelector('.active')?.textContent||'').toLowerCase().includes('analytics'))window.renderAnalytics&&window.renderAnalytics()},800));
+})();
+</script>
 </body>
 </html>
