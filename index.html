@@ -3694,5 +3694,1298 @@ initDragDrop();
   window.addEventListener('load',()=>setTimeout(()=>{if((document.querySelector('.active')?.textContent||'').toLowerCase().includes('analytics'))window.renderAnalytics&&window.renderAnalytics()},800));
 })();
 </script>
+<!-- ════════════════════════════════════════════════════════════════════════════════
+     EXCEL ANALYSER — INTEGRATED FIX PATCH (v6)
+     ─────────────────────────────────────────────────────────────────────────────
+     Paste this ENTIRE block immediately before the closing </body> tag of your
+     dashboard HTML. It is self-contained, idempotent, and supersedes the v5 patch
+     (you can leave v5 in place if you already pasted it — v6 detects v5 and skips
+     the duplicate work).
+
+     What v6 does on top of v5:
+
+       ⭐ NEW: Auto-derives WHO from the "Linked Issues" column
+              - If Linked Issues is blank/empty   → WHO = HD
+              - If Linked Issues has any value    → WHO = ENGG
+              (multi-value like "LRPS-20878;ESLGEN-8607" is still ENGG)
+              No more manual updates needed in the Excel before upload.
+
+       ⭐ Linked Issues is now a recognised canonical field in the mapping screen
+       ⭐ A toggle pill appears in the header showing the derivation status,
+          with a click to disable it (falls back to whatever WHO column says)
+       ⭐ Filter dropdowns, KPIs, charts, pivots, comparator, months tab — all
+          pick up the derived WHO automatically because they read from S.raw
+
+     Plus everything from v5:
+
+       • Clears stale localStorage mappings (cache version → v6)
+       • Validates auto-detected mappings against real row values
+       • Fixes the undefined `CLOSED` variable bug
+       • Robust date parsing in heatmap & issue type trend (uses parseDate)
+       • "Re-detect Mapping" header button
+       • Field Mapping inspector strip
+       • Dedupes the analytics section
+
+     Safe to apply multiple times.
+     ════════════════════════════════════════════════════════════════════════════ -->
+
+<script id="excel-analyser-integrated-fixes-v6">
+(function(){
+  if(window.__EA_FIXES_V6_APPLIED) return;
+  window.__EA_FIXES_V6_APPLIED = true;
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 1: Bump cache version → clears stale hd_fm_* mappings + sessions
+  // ──────────────────────────────────────────────────────────────────────────
+  const NEW_CACHE_VERSION = 'excel_analyser_v6_linked_who';
+  try {
+    if (localStorage.getItem('hd_cache_ver') !== NEW_CACHE_VERSION) {
+      const toRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith('hd_fm_') || k === 'hd_session') toRemove.push(k);
+      }
+      toRemove.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('hd_cache_ver', NEW_CACHE_VERSION);
+      if (toRemove.length) console.log('[EA-fix v6] Cleared ' + toRemove.length + ' stale entries:', toRemove);
+    }
+  } catch (e) { console.warn('[EA-fix v6] localStorage clear failed:', e); }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 2: Add "Linked Issues" to the canonical field schema (CF)
+  //          so the mapping screen recognises and exposes it.
+  // ──────────────────────────────────────────────────────────────────────────
+  if (window.CF && !window.CF['Linked Issues']) {
+    window.CF['Linked Issues'] = {
+      label: 'Linked Engineering Tickets',
+      req: false,
+      aliases: ['linked issues', 'linked tickets', 'linked', 'engineering ticket',
+                'engg ticket', 'linked ticket status', 'related issues', 'parent ticket']
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 3: WHO derivation rule — single source of truth.
+  //          Empty/blank Linked Issues → HD ; any value → ENGG.
+  // ──────────────────────────────────────────────────────────────────────────
+  // Persisted user preference: keep derivation ON unless they explicitly switch
+  // it off. Default true.
+  function getDeriveWhoPref() {
+    const v = localStorage.getItem('ea_derive_who');
+    return v === null ? true : v === '1';
+  }
+  function setDeriveWhoPref(b) {
+    localStorage.setItem('ea_derive_who', b ? '1' : '0');
+  }
+
+  // The actual classifier. Returns 'HD', 'ENGG', or '' (when no signal).
+  function classifyWho(linkedVal) {
+    if (linkedVal == null) return 'HD';
+    const v = String(linkedVal).trim();
+    if (!v || v === '-' || v === 'None' || v === 'null' || v === 'undefined') return 'HD';
+    return 'ENGG';
+  }
+
+  // Apply derivation to an array of canonical rows in place.
+  // Returns { hd: n, engg: n, derived: bool } stats.
+  function deriveWhoForRows(rows) {
+    if (!Array.isArray(rows) || !rows.length) return { hd: 0, engg: 0, derived: false };
+    if (!getDeriveWhoPref()) return { hd: 0, engg: 0, derived: false };
+    // Only derive if Linked Issues field is actually mapped & at least one row has a value
+    if (!window.S || !S.fieldMap) return { hd: 0, engg: 0, derived: false };
+    const linkedMapped = S.fieldMap['Linked Issues'] && S.fieldMap['Linked Issues'] !== '__UNMAPPED__';
+    if (!linkedMapped) return { hd: 0, engg: 0, derived: false };
+
+    let hd = 0, engg = 0;
+    rows.forEach(r => {
+      const w = classifyWho(r['Linked Issues']);
+      r['WHO'] = w;        // override
+      if (w === 'HD') hd++; else engg++;
+    });
+    return { hd, engg, derived: true };
+  }
+  // Expose for debug + later hooks
+  window.eaDeriveWhoForRows = deriveWhoForRows;
+  window.eaClassifyWho = classifyWho;
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 4: Hook into applyMappingAndLaunch to run derivation after S.raw is
+  //          built. Also hook the comparator file loader so comparison files
+  //          get the same treatment.
+  // ──────────────────────────────────────────────────────────────────────────
+  function hookApplyMappingAndLaunch() {
+    if (typeof window.applyMappingAndLaunch !== 'function') return false;
+    if (window.applyMappingAndLaunch.__eaV6Wrapped) return true;
+    const orig = window.applyMappingAndLaunch;
+    window.applyMappingAndLaunch = function(data, name, sheetCount) {
+      const result = orig.apply(this, arguments);
+      // S.raw is now populated. Run derivation.
+      try {
+        if (window.S && Array.isArray(S.raw)) {
+          // Ensure WHO field exists in every row (defaults to empty)
+          S.raw.forEach(r => { if (!('WHO' in r)) r['WHO'] = ''; });
+          const stats = deriveWhoForRows(S.raw);
+          // Also re-mirror filtered + comp slots
+          S.filtered = [...S.raw];
+          if (Array.isArray(S.compB)) S.compB = S.raw;
+          // Ensure fieldMap reports WHO as available (so fieldAvailable('WHO') is true)
+          if (stats.derived) {
+            if (!S.fieldMap['WHO'] || S.fieldMap['WHO'] === '__UNMAPPED__') {
+              S.fieldMap['WHO'] = '__DERIVED_FROM_LINKED__';
+            }
+            console.log('[EA-fix v6] WHO derived from Linked Issues:', stats);
+          }
+        }
+      } catch (e) { console.warn('[EA-fix v6] WHO derivation failed:', e); }
+      // Repopulate filters & re-render to reflect derived WHO
+      try {
+        if (typeof window.populateFilters === 'function') populateFilters();
+        if (typeof window.renderAll === 'function') renderAll();
+        if (typeof window.runDataQuality === 'function') runDataQuality();
+        updateWhoToggleUI();
+      } catch (e) { console.warn('[EA-fix v6] Re-render failed:', e); }
+      return result;
+    };
+    window.applyMappingAndLaunch.__eaV6Wrapped = true;
+    return true;
+  }
+
+  // Hook the comparator file loader. Comp files use their own S.compA / S.monthA
+  // arrays and don't go through applyMappingAndLaunch, so we patch the field
+  // map step inside loadCompFile / loadMonthFile.
+  function hookCompFileLoaders() {
+    ['loadCompFile', 'loadMonthFile'].forEach(fname => {
+      if (typeof window[fname] !== 'function') return;
+      if (window[fname].__eaV6Wrapped) return;
+      const orig = window[fname];
+      window[fname] = function(side, e) {
+        const file = e && e.target && e.target.files && e.target.files[0];
+        if (!file || typeof parseExcel !== 'function') return orig.apply(this, arguments);
+        // Re-implement using our derivation. Mirrors the body of the original
+        // but adds the WHO derivation step.
+        parseExcel(file, function(rawData, headers, _, name){
+          const mapped = rawData.map(row => {
+            const obj = {};
+            Object.entries(S.fieldMap).forEach(([c, a]) => {
+              obj[c] = (a && a !== '__UNMAPPED__' && a !== '__DERIVED_FROM_LINKED__' && row[a] !== undefined)
+                ? String(row[a]).trim() : '';
+            });
+            return obj;
+          }).filter(r => r['Key'] && r['Key'] !== '');
+          // Apply WHO derivation here too
+          mapped.forEach(r => { if (!('WHO' in r)) r['WHO'] = ''; });
+          if (getDeriveWhoPref() && S.fieldMap['Linked Issues'] && S.fieldMap['Linked Issues'] !== '__UNMAPPED__') {
+            mapped.forEach(r => { r['WHO'] = classifyWho(r['Linked Issues']); });
+          }
+          // Wire into the right state slot exactly as the originals do
+          if (fname === 'loadCompFile') {
+            if (side === 'a') {
+              S.compA = mapped;
+              const lbl = document.getElementById('comp-label-a'); if (lbl) lbl.textContent = name + ' (' + mapped.length + ' records)';
+              document.getElementById('comp-drop-a').classList.add('loaded');
+            } else {
+              S.compB = mapped;
+              const lbl = document.getElementById('comp-label-b'); if (lbl) lbl.textContent = name + ' (' + mapped.length + ' records)';
+              document.getElementById('comp-drop-b').classList.add('loaded');
+            }
+            if (S.compA && S.compA.length && S.compB && S.compB.length && typeof renderComparator === 'function') renderComparator();
+          } else {
+            if (side === 'a') {
+              S.monthA = mapped; S.monthLabels.a = name;
+              const lbl = document.getElementById('mc-label-a'); if (lbl) lbl.textContent = name + ' (' + mapped.length + ' records)';
+              document.getElementById('mc-drop-a').classList.add('loaded');
+            } else {
+              S.monthB = mapped; S.monthLabels.b = name;
+              const lbl = document.getElementById('mc-label-b'); if (lbl) lbl.textContent = name + ' (' + mapped.length + ' records)';
+              document.getElementById('mc-drop-b').classList.add('loaded');
+            }
+            if (typeof renderMonthsTab === 'function') renderMonthsTab();
+          }
+        });
+      };
+      window[fname].__eaV6Wrapped = true;
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 5: WHO derivation toggle pill in the header.
+  // ──────────────────────────────────────────────────────────────────────────
+  function addWhoTogglePill() {
+    const actions = document.querySelector('.header-actions');
+    if (!actions || document.getElementById('ea-who-toggle')) return;
+    const pill = document.createElement('button');
+    pill.id = 'ea-who-toggle';
+    pill.className = 'btn btn-secondary btn-sm';
+    pill.style.cssText = 'font-size:.7rem;white-space:nowrap;';
+    pill.onclick = function() {
+      const cur = getDeriveWhoPref();
+      setDeriveWhoPref(!cur);
+      // Re-apply WHO derivation immediately
+      if (window.S && Array.isArray(S.raw)) {
+        if (!cur === false) {
+          // Turning OFF — restore WHO from the actual source column if mapped
+          const whoSrc = S.fieldMap && S.fieldMap['WHO'];
+          if (whoSrc && whoSrc !== '__UNMAPPED__' && whoSrc !== '__DERIVED_FROM_LINKED__' && Array.isArray(S.rawUnmapped)) {
+            // Refresh from rawUnmapped
+            S.raw.forEach((r, i) => {
+              const orig = S.rawUnmapped[i];
+              r['WHO'] = orig && orig[whoSrc] != null ? String(orig[whoSrc]).trim() : '';
+            });
+          } else {
+            // No actual WHO column → clear it
+            S.raw.forEach(r => { r['WHO'] = ''; });
+          }
+        } else {
+          deriveWhoForRows(S.raw);
+        }
+        S.filtered = [...S.raw];
+        if (typeof populateFilters === 'function') populateFilters();
+        if (typeof applyFilters === 'function') applyFilters();
+        if (typeof runDataQuality === 'function') runDataQuality();
+      }
+      updateWhoToggleUI();
+    };
+    // Insert after the Re-detect button if present, else at the start
+    const ref = document.getElementById('ea-force-remap-btn') || document.getElementById('remap-btn');
+    if (ref && ref.nextSibling) actions.insertBefore(pill, ref.nextSibling);
+    else if (ref) ref.parentNode.appendChild(pill);
+    else actions.prepend(pill);
+    updateWhoToggleUI();
+  }
+
+  function updateWhoToggleUI() {
+    const pill = document.getElementById('ea-who-toggle');
+    if (!pill) return;
+    const on = getDeriveWhoPref();
+    const linkedMapped = window.S && S.fieldMap && S.fieldMap['Linked Issues'] && S.fieldMap['Linked Issues'] !== '__UNMAPPED__';
+    if (!linkedMapped) {
+      pill.style.display = 'none';
+      return;
+    }
+    pill.style.display = '';
+    // Count for display
+    let hd = 0, engg = 0;
+    if (on && window.S && Array.isArray(S.raw)) {
+      S.raw.forEach(r => {
+        if (classifyWho(r['Linked Issues']) === 'HD') hd++; else engg++;
+      });
+    }
+    if (on) {
+      pill.innerHTML = '🔗 WHO auto: ' + hd + ' HD / ' + engg + ' ENGG ✓';
+      pill.title = 'WHO is being auto-derived from the Linked Issues column.\n• Blank Linked Issues → HD\n• Has a value → ENGG\nClick to disable and use the manual WHO column instead.';
+      pill.style.background = 'rgba(16,185,129,.15)';
+      pill.style.borderColor = 'var(--accent3)';
+      pill.style.color = 'var(--accent3)';
+    } else {
+      pill.innerHTML = '🔗 WHO auto: OFF';
+      pill.title = 'WHO auto-derivation is disabled. Click to re-enable.\nWHO will be read from whatever column is mapped, or blank.';
+      pill.style.background = '';
+      pill.style.borderColor = '';
+      pill.style.color = '';
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 6: Patch fieldAvailable so WHO is reported as available even when
+  //          it's been derived (mapped to the synthetic __DERIVED_FROM_LINKED__).
+  // ──────────────────────────────────────────────────────────────────────────
+  function hookFieldAvailable() {
+    if (typeof window.fieldAvailable !== 'function') return false;
+    if (window.fieldAvailable.__eaV6Wrapped) return true;
+    const orig = window.fieldAvailable;
+    window.fieldAvailable = function(f) {
+      const m = window.S && S.fieldMap && S.fieldMap[f];
+      if (m === '__DERIVED_FROM_LINKED__') return true;
+      return orig.apply(this, arguments);
+    };
+    window.fieldAvailable.__eaV6Wrapped = true;
+    return true;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 7: Carry over the v5 fixes (cache bust above + everything below).
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // Validate auto-mapping against actual row values to prevent regressions.
+  function isPlausibleForField(canonical, sampleVals) {
+    const cleaned = sampleVals
+      .map(v => String(v == null ? '' : v).trim())
+      .filter(v => v && v !== '-' && v !== 'Unknown' && v !== 'None');
+    if (!cleaned.length) return false;
+    const lower = cleaned.map(v => v.toLowerCase());
+    const looksLikeDate = lower.every(v => /^\d{4}-\d{2}-\d{2}/.test(v) ||
+      /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/.test(v) ||
+      /^[a-z]{3}\s+[a-z]{3}\s+\d{1,2}\s+\d{4}/.test(v));
+    const looksNumeric = cleaned.every(v => /^-?\d+(\.\d+)?$/.test(v));
+
+    switch (canonical) {
+      case 'WHO':
+        if (looksLikeDate || looksNumeric) return false;
+        return cleaned.filter(v => v.length <= 30).length / cleaned.length >= 0.8;
+      case 'Current Worker':
+      case 'SVM In Charge':
+        if (looksLikeDate) return false;
+        return cleaned.length >= 2;
+      case 'Priority':
+        if (looksLikeDate) return false;
+        return cleaned.some(v => /^(critical|high|medium|low|show\s*stopper|p[0-5]|sev[0-5])/i.test(v));
+      case 'Status':
+        if (looksLikeDate || looksNumeric) return false;
+        return true;
+      case 'Issue Type':
+        if (looksLikeDate || looksNumeric) return false;
+        return cleaned.some(v => /(incident|request|task|bug|story|epic|sub.?task|service)/i.test(v));
+      case 'Created':
+      case 'Resolved':
+        return looksLikeDate || looksNumeric;
+      case 'Linked Issues':
+        // Could be empty, or contain alphanumeric ticket IDs like ABC-123 or ABC-123;XYZ-456
+        if (looksLikeDate) return false;
+        return cleaned.some(v => /^[A-Z]{2,}[-_]?\d+/i.test(v));
+      default:
+        return true;
+    }
+  }
+
+  // Wrap autoDetectMapping
+  function hookAutoDetectMapping() {
+    if (typeof window.autoDetectMapping !== 'function') return false;
+    if (window.autoDetectMapping.__eaV6Wrapped) return true;
+    const orig = window.autoDetectMapping;
+    window.autoDetectMapping = function(columns) {
+      const result = orig.apply(this, arguments);
+      if (!result || !result.map) return result;
+      const sample = (window.S && Array.isArray(S.rawUnmapped) ? S.rawUnmapped : []).slice(0, 30);
+      if (!sample.length) return result;
+
+      const changes = [];
+      Object.entries(result.map).forEach(([canon, srcCol]) => {
+        if (!srcCol || srcCol === '__UNMAPPED__') return;
+        const vals = sample.map(r => r[srcCol]).filter(v => v != null && String(v).trim() !== '');
+        if (!isPlausibleForField(canon, vals)) {
+          const def = (window.CF || {})[canon];
+          if (!def) return;
+          const usedCols = new Set(Object.values(result.map).filter(v => v && v !== '__UNMAPPED__' && v !== srcCol));
+          let alt = null;
+          for (const c of columns) {
+            if (usedCols.has(c) || c === srcCol) continue;
+            const altVals = sample.map(r => r[c]).filter(v => v != null && String(v).trim() !== '');
+            if (!altVals.length) continue;
+            const score = (typeof fuzzyMatch === 'function') ? fuzzyMatch(c, [canon, ...(def.aliases || [])], canon) : 50;
+            if (score >= 50 && isPlausibleForField(canon, altVals)) { alt = c; break; }
+          }
+          changes.push({ canon, was: srcCol, now: alt || '__UNMAPPED__' });
+          result.map[canon] = alt || '__UNMAPPED__';
+        }
+      });
+
+      // Also: if we added "Linked Issues" to CF but the original detect didn't catch it,
+      // try to find it now.
+      if ((!result.map['Linked Issues'] || result.map['Linked Issues'] === '__UNMAPPED__')
+          && typeof fuzzyMatch === 'function') {
+        const used = new Set(Object.values(result.map).filter(v => v && v !== '__UNMAPPED__'));
+        let bestCol = null, bestSc = 0;
+        for (const c of columns) {
+          if (used.has(c)) continue;
+          const sc = fuzzyMatch(c, ['Linked Issues', ...window.CF['Linked Issues'].aliases], 'Linked Issues');
+          if (sc > bestSc) { bestSc = sc; bestCol = c; }
+        }
+        if (bestSc >= 60 && bestCol) {
+          // Also validate the column actually has plausible ticket-ID-ish values
+          const altVals = sample.map(r => r[bestCol]).filter(v => v != null && String(v).trim() !== '');
+          if (altVals.length === 0 || isPlausibleForField('Linked Issues', altVals)) {
+            result.map['Linked Issues'] = bestCol;
+            changes.push({ canon: 'Linked Issues', was: '__UNMAPPED__', now: bestCol });
+          }
+        }
+      }
+
+      if (changes.length) {
+        console.log('[EA-fix v6] Mapping validation corrected:', changes);
+        result.fromCache = false;
+        try { localStorage.setItem(result.savedKey, JSON.stringify(result.map)); } catch (e) {}
+      }
+      return result;
+    };
+    window.autoDetectMapping.__eaV6Wrapped = true;
+    return true;
+  }
+
+  // Fix the bare CLOSED reference
+  if (typeof window.CLOSED === 'undefined' && typeof window.CLOSED_STATUSES !== 'undefined') {
+    window.CLOSED = window.CLOSED_STATUSES;
+  }
+
+  // Robust heatmap & issue-type-trend using parseDate
+  function installRobustRenderers() {
+    if (typeof window.parseDate !== 'function') return;
+    if (window.__EA_RENDERERS_INSTALLED) return;
+    window.__EA_RENDERERS_INSTALLED = true;
+
+    function rows() {
+      return (window.S && Array.isArray(S.filtered) && S.filtered.length)
+        ? S.filtered
+        : (window.S && Array.isArray(S.raw) ? S.raw : []);
+    }
+    function dateKey(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function niceDate(k) {
+      const d = new Date(k + 'T00:00:00');
+      return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+    }
+    function show(title, sub, rs) {
+      if (typeof window.showTicketListPanel === 'function') showTicketListPanel(title, sub, rs);
+      else alert(title + '\n' + rs.length + ' tickets');
+    }
+
+    window.renderHeatmap = function () {
+      const d = rows();
+      const container = document.getElementById('heatmap-container');
+      if (!container) return;
+      const dated = d.map(r => ({ r, dt: parseDate(r.Created || r['Created Date'] || r.Resolved || r['Resolved Date']) })).filter(x => x.dt);
+      if (!dated.length) {
+        container.innerHTML = '<div class="ea-empty-box"><b>No data to display.</b><br>No valid Created or Resolved date values were found in the loaded rows. If a date column exists in your file, click <b>Remap</b> in the header to remap it.</div>';
+        return;
+      }
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const hours = [...Array(24)].map((_, i) => i);
+      const dh = {};
+      days.forEach((_, i) => { dh[i] = {}; hours.forEach(h => dh[i][h] = 0); });
+      const byDate = {};
+      dated.forEach(x => {
+        const dow = (x.dt.getDay() + 6) % 7;
+        const h = x.dt.getHours();
+        const k = dateKey(x.dt);
+        dh[dow][h]++;
+        if (!byDate[k]) byDate[k] = { total: 0, inc: 0, sr: 0 };
+        byDate[k].total++;
+        if (x.r['Issue Type'] === 'Incident') byDate[k].inc++;
+        if (x.r['Issue Type'] === 'Service Request') byDate[k].sr++;
+      });
+      const max = Math.max(1, ...Object.values(dh).flatMap(o => Object.values(o)));
+      let html = '<div class="ea-mini-note">Click any cell or bar to view matching tickets.</div>';
+      const cw = 31, ch = 23, pl = 52, pt = 25;
+      let svg = `<svg width="${pl + 24 * cw + 10}" height="${pt + 7 * ch + 10}" style="font-family:DM Sans,Arial;display:block;max-width:100%">`;
+      hours.forEach(h => { if (h % 3 === 0) svg += `<text x="${pl + h * cw + cw / 2}" y="15" text-anchor="middle" fill="#8b949e" font-size="9">${h}:00</text>`; });
+      days.forEach((day, i) => {
+        const y = pt + i * ch;
+        svg += `<text x="${pl - 7}" y="${y + 15}" text-anchor="end" fill="#8b949e" font-size="10">${day}</text>`;
+        hours.forEach(h => {
+          const v = dh[i][h];
+          const intensity = v / max;
+          const alpha = (0.10 + intensity * 0.88).toFixed(2);
+          svg += `<rect class="ea-clickable" onclick="eaDayHourDrill(${i},${h})" x="${pl + h * cw}" y="${y}" width="${cw - 2}" height="${ch - 2}" rx="3" fill="rgba(0,212,255,${alpha})" stroke="#94a3b8" stroke-width=".35"><title>${day} ${h}:00 — ${v} tickets</title></rect>`;
+          if (v) svg += `<text pointer-events="none" x="${pl + h * cw + cw / 2}" y="${y + 15}" text-anchor="middle" fill="${intensity > 0.55 ? '#06121f' : '#334155'}" font-size="9">${v}</text>`;
+        });
+      });
+      svg += '</svg>';
+      html += `<div style="margin-bottom:1rem"><div style="font-weight:700;font-size:.75rem;margin-bottom:.35rem;color:var(--muted)">Ticket volume by weekday and hour</div>${svg}</div>`;
+
+      const keys = Object.keys(byDate).sort();
+      const maxD = Math.max(1, ...keys.map(k => byDate[k].total));
+      html += '<div style="font-weight:700;font-size:.75rem;margin-bottom:.35rem;color:var(--muted)">Daily ticket count</div>';
+      html += '<div style="display:flex;align-items:flex-end;gap:5px;min-height:128px;overflow-x:auto;padding:6px 4px 28px">';
+      keys.forEach(k => {
+        const v = byDate[k];
+        const h = Math.max(8, Math.round(v.total / maxD * 82));
+        html += `<div class="ea-clickable" onclick="eaDateDrill('${k}')" title="${niceDate(k)}: ${v.total} tickets (${v.inc} Inc, ${v.sr} SR)" style="width:38px;flex:0 0 38px;text-align:center"><div style="height:${h}px;background:linear-gradient(to top,#ef4444,#00d4ff);border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--muted);line-height:1.1;margin-top:4px">${niceDate(k).replace(' ', '<br>')}</div><div style="font-size:9px;font-weight:700;color:var(--text)">${v.total}</div></div>`;
+      });
+      html += '</div>';
+      container.innerHTML = html;
+    };
+
+    window.eaDateDrill = function (key) {
+      const rs = rows().filter(r => {
+        const d = parseDate(r.Created || r['Created Date'] || r.Resolved || r['Resolved Date']);
+        return d && dateKey(d) === key;
+      });
+      show(niceDate(key), rs.length + ' tickets on ' + key, rs);
+    };
+    window.eaDayHourDrill = function (dow, hour) {
+      const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const rs = rows().filter(r => {
+        const d = parseDate(r.Created || r['Created Date']);
+        return d && ((d.getDay() + 6) % 7) === dow && d.getHours() === hour;
+      });
+      show(names[dow] + ' ' + String(hour).padStart(2, '0') + ':00', rs.length + ' tickets', rs);
+    };
+
+    window.renderIssueTypeTrend = function () {
+      const canvasId = 'issueTypeTrendChart';
+      const c = document.getElementById(canvasId);
+      if (!c || !window.Chart) return;
+      const d = rows();
+      const dated = d.map(r => ({ r, dt: parseDate(r.Created || r['Created Date'] || r.Resolved || r['Resolved Date']) })).filter(x => x.dt);
+      if (!dated.length) {
+        const wrap = c.closest('.chart-wrap') || c.parentElement;
+        if (wrap) wrap.innerHTML = '<div class="ea-empty-box" style="margin:0">No valid date column for trend.</div>';
+        return;
+      }
+      const keys = [...new Set(dated.map(x => dateKey(x.dt)))].sort();
+      const inc = keys.map(k => dated.filter(x => dateKey(x.dt) === k && x.r['Issue Type'] === 'Incident').length);
+      const sr = keys.map(k => dated.filter(x => dateKey(x.dt) === k && x.r['Issue Type'] === 'Service Request').length);
+      if (S.charts[canvasId]) S.charts[canvasId].destroy();
+      S.charts[canvasId] = new Chart(c.getContext('2d'), {
+        type: 'bar',
+        data: { labels: keys, datasets: [
+          { label: 'Incident', data: inc, backgroundColor: 'rgba(239,68,68,.7)' },
+          { label: 'Service Request', data: sr, backgroundColor: 'rgba(124,58,237,.7)' }
+        ] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          onClick: (e, els) => {
+            if (!els.length) return;
+            const type = els[0].datasetIndex === 0 ? 'Incident' : 'Service Request';
+            const k = keys[els[0].index];
+            const rs = dated.filter(x => dateKey(x.dt) === k && x.r['Issue Type'] === type).map(x => x.r);
+            show(type + ' — ' + niceDate(k), rs.length + ' tickets', rs);
+          },
+          plugins: { legend: { labels: { color: '#8b949e' } } },
+          scales: { x: { ticks: { color: '#8b949e', maxRotation: 45 } }, y: { beginAtZero: true, ticks: { color: '#8b949e' } } }
+        }
+      });
+    };
+
+    // Dedupe analytics sections after each render
+    function dedupeAnalyticsSections() {
+      const analytics = document.getElementById('tab-analytics');
+      if (!analytics) return;
+      const seenCanvas = new Set();
+      analytics.querySelectorAll('.analytics-section').forEach(sec => {
+        const canvases = sec.querySelectorAll('canvas[id]');
+        if (!canvases.length) return;
+        const ids = [...canvases].map(c => c.id);
+        const dupe = ids.some(id => seenCanvas.has(id));
+        if (dupe) { sec.remove(); return; }
+        ids.forEach(id => seenCanvas.add(id));
+      });
+    }
+    const origRA = window.renderAnalytics;
+    if (typeof origRA === 'function' && !origRA.__eaV6Wrapped) {
+      window.renderAnalytics = function () {
+        try { origRA.apply(this, arguments); } catch (e) { console.warn('renderAnalytics:', e); }
+        setTimeout(dedupeAnalyticsSections, 120);
+      };
+      window.renderAnalytics.__eaV6Wrapped = true;
+    }
+    dedupeAnalyticsSections();
+  }
+
+  // Re-detect button
+  function addRemapButton() {
+    const actions = document.querySelector('.header-actions');
+    if (!actions || document.getElementById('ea-force-remap-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'ea-force-remap-btn';
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.title = 'Force re-detect column mapping for the current file (use this if HD/ENGG show 0 or charts are empty)';
+    btn.textContent = '🔄 Re-detect';
+    btn.onclick = function () {
+      if (!confirm('Force re-detect the column mapping for this file?\n\nThis will clear any cached mapping and reopen the mapping screen.')) return;
+      try {
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('hd_fm_')) toRemove.push(k);
+        }
+        toRemove.forEach(k => localStorage.removeItem(k));
+      } catch (e) {}
+      if (window.S && S.pendingParse) {
+        const { columns, fileName, sheetCount } = S.pendingParse;
+        const { map, savedKey } = autoDetectMapping(columns);
+        if (typeof showMappingScreen === 'function') {
+          showMappingScreen(columns, map, savedKey, fileName, sheetCount, S.rawUnmapped ? S.rawUnmapped.length : 0);
+        }
+      } else {
+        alert('No file is currently loaded. Click 📂 to open a file first.');
+      }
+    };
+    const ref = document.getElementById('remap-btn');
+    if (ref) actions.insertBefore(btn, ref); else actions.prepend(btn);
+  }
+
+  // Mapping inspector strip
+  function showMappingInspector() {
+    if (!window.S || !S.fieldMap || !Object.keys(S.fieldMap).length) return;
+    const bar = document.getElementById('status-bar');
+    if (!bar) return;
+    let panel = document.getElementById('ea-mapping-inspector');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'ea-mapping-inspector';
+      panel.style.cssText = 'margin:.4rem 0 .8rem;padding:.55rem .9rem;background:var(--surface2);border:1px solid var(--border);border-radius:9px;font-size:.72rem;color:var(--muted);';
+      bar.parentNode.insertBefore(panel, bar.nextSibling);
+    }
+    const cells = Object.entries(S.fieldMap).map(([canon, src]) => {
+      const isDerived = src === '__DERIVED_FROM_LINKED__';
+      const ok = src && src !== '__UNMAPPED__';
+      const color = isDerived ? 'var(--accent)' : (ok ? 'var(--accent3)' : 'var(--accent4)');
+      const srcLbl = isDerived ? 'derived from Linked Issues' : (ok ? src : '— not in file —');
+      return `<span style="display:inline-block;margin:.15rem .45rem .15rem 0;padding:.18rem .45rem;background:var(--surface);border:1px solid var(--border);border-radius:5px;"><span style="color:var(--text);font-weight:600">${canon}</span> <span style="color:${color}">→</span> <span style="color:${color}">${srcLbl}</span></span>`;
+    }).join('');
+    panel.innerHTML = `<div style="margin-bottom:.25rem;font-weight:600;color:var(--text)">📋 Field Mapping <span style="font-weight:400;color:var(--muted)">(🔄 Re-detect to change · 🔗 toggle to disable auto-WHO)</span></div>${cells}`;
+  }
+
+  // Hook applyFilters so the inspector + toggle stay fresh.
+  function hookApplyFilters() {
+    if (typeof window.applyFilters !== 'function') return false;
+    if (window.applyFilters.__eaV6Wrapped) return true;
+    const orig = window.applyFilters;
+    window.applyFilters = function() {
+      const r = orig.apply(this, arguments);
+      try { showMappingInspector(); updateWhoToggleUI(); } catch (e) {}
+      return r;
+    };
+    window.applyFilters.__eaV6Wrapped = true;
+    return true;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  STEP 8: Wire everything up — hooks must wait for the original code to load
+  // ──────────────────────────────────────────────────────────────────────────
+  function wire() {
+    hookAutoDetectMapping();
+    hookApplyMappingAndLaunch();
+    hookCompFileLoaders();
+    hookFieldAvailable();
+    hookApplyFilters();
+    installRobustRenderers();
+    addRemapButton();
+    addWhoTogglePill();
+    showMappingInspector();
+    updateWhoToggleUI();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wire);
+  } else {
+    setTimeout(wire, 200);
+  }
+  // Re-wire when dashboard becomes visible
+  const obs = new MutationObserver(() => {
+    const dash = document.getElementById('dashboard');
+    if (dash && dash.style.display !== 'none') {
+      addRemapButton();
+      addWhoTogglePill();
+      showMappingInspector();
+      updateWhoToggleUI();
+    }
+  });
+  obs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['style'] });
+
+  // If a file is already loaded when this script runs (e.g. session restore),
+  // also run derivation against the current S.raw
+  setTimeout(() => {
+    if (window.S && Array.isArray(S.raw) && S.raw.length) {
+      try {
+        S.raw.forEach(r => { if (!('WHO' in r)) r['WHO'] = ''; });
+        const stats = deriveWhoForRows(S.raw);
+        if (stats.derived) {
+          S.filtered = [...S.raw];
+          if (!S.fieldMap['WHO'] || S.fieldMap['WHO'] === '__UNMAPPED__') S.fieldMap['WHO'] = '__DERIVED_FROM_LINKED__';
+          if (typeof populateFilters === 'function') populateFilters();
+          if (typeof renderAll === 'function') renderAll();
+          if (typeof runDataQuality === 'function') runDataQuality();
+          updateWhoToggleUI();
+          showMappingInspector();
+          console.log('[EA-fix v6] Late derivation:', stats);
+        }
+      } catch (e) { console.warn(e); }
+    }
+  }, 600);
+
+  console.log('[EA-fix v6] integrated fixes applied. Cache cleared, validation active, CLOSED alias set, Re-detect & WHO toggle added, WHO auto-derives from Linked Issues.');
+})();
+</script>
+
+<style id="excel-analyser-integrated-fixes-v6-styles">
+#ea-force-remap-btn { background: rgba(0,212,255,.08); border-color: rgba(0,212,255,.3); color: var(--accent); }
+#ea-force-remap-btn:hover { background: rgba(0,212,255,.18); }
+#ea-who-toggle { transition: all .15s; }
+#ea-who-toggle:hover { filter: brightness(1.15); }
+#ea-mapping-inspector { line-height: 1.7; }
+</style>
+<!-- END EXCEL ANALYSER INTEGRATED FIX PATCH v6 ─────────────────────────────── -->
+<!-- ════════════════════════════════════════════════════════════════════════════════
+     EXCEL ANALYSER — v7 ANALYTICS CLEANUP PATCH
+     ─────────────────────────────────────────────────────────────────────────────
+     Paste this immediately BEFORE the closing </body> tag of your dashboard.
+     It can sit either before OR after the v6 patch — order doesn't matter.
+
+     What v7 fixes (issues NOT caused by v6, but pre-existing bugs):
+
+       ✅ Removes duplicate "Issue Type Breakdown by Project" and other repeated
+          analytics-section blocks (caused by old fallback scripts re-creating
+          destroyed canvases).
+
+       ✅ Stops the canvas-destruction loop: when a chart has no data, the empty
+          message now sits NEXT TO the canvas (canvas stays alive), so the next
+          render doesn't spawn a new duplicate section.
+
+       ✅ Adds an "Inspect Mapping" button that opens a console dump of the
+          current field mapping (useful for diagnosing "no data" errors).
+
+     Safe to apply multiple times. Adds zero KB of dependencies.
+     ════════════════════════════════════════════════════════════════════════════ -->
+
+<script id="excel-analyser-v7-cleanup">
+(function(){
+  if(window.__EA_V7_APPLIED) return;
+  window.__EA_V7_APPLIED = true;
+
+  // ── Dedupe by section-title text ──────────────────────────────────────────
+  // Walks the analytics tab and removes duplicate <div class="analytics-section">
+  // blocks that share the same title. When duplicates have a canvas vs. an
+  // empty box, the one WITH the canvas is preferred.
+  function dedupeAnalytics(){
+    const tab = document.getElementById('tab-analytics');
+    if(!tab) return 0;
+    const seen = {};
+    let removed = 0;
+    tab.querySelectorAll('.analytics-section').forEach(sec => {
+      const t = sec.querySelector('.section-title');
+      const key = t ? t.textContent.replace(/\s+/g,' ').trim().slice(0,80) : '';
+      if(!key) return;
+      const prev = seen[key];
+      if(prev){
+        const thisHasCanvas = !!sec.querySelector('canvas');
+        const prevHasCanvas = !!prev.querySelector('canvas');
+        if(thisHasCanvas && !prevHasCanvas){
+          prev.remove();
+          seen[key] = sec;
+        } else {
+          sec.remove();
+        }
+        removed++;
+      } else {
+        seen[key] = sec;
+      }
+    });
+    if(removed) console.log('[EA-v7] Removed '+removed+' duplicate analytics sections');
+    return removed;
+  }
+
+  // ── Patch ensureCanvasCard so it doesn't create new sections when the
+  //    canvas was just removed accidentally. Instead, restore the canvas in
+  //    place inside the empty box if a section with the same title exists.
+  function safeguardCanvasCreation(){
+    // After dedupe, ensure that ea-analytics-complete-fix's ensureCanvasCard
+    // never has to run because the original canvases are still in place.
+    // We do this by replacing the empty-box innerHTML with the canvas back.
+    const tab = document.getElementById('tab-analytics');
+    if(!tab) return;
+    const expected = {
+      'issueTypeTrendChart': '🔴🔵 Incident vs Service Request — Trend Over Time',
+      'issueTypeProjectChart': '🔴🔵 Issue Type Breakdown by Project',
+      'svmChart': '📋 SVM In-Charge Breakdown',
+      'trendChart': '📅 Volume Over Time',
+      'histChart': '⏳ Resolution Time Distribution'
+    };
+    Object.entries(expected).forEach(([canvasId, titleText]) => {
+      const titleEl = [...tab.querySelectorAll('.section-title')]
+        .find(el => el.textContent.replace(/\s+/g,' ').trim().includes(titleText.split(' ').slice(1,4).join(' ')));
+      if(!titleEl) return;
+      const section = titleEl.closest('.analytics-section');
+      if(!section) return;
+      // If the section has no canvas with this id, try to put one back
+      if(!section.querySelector('#'+canvasId)){
+        const card = section.querySelector('.chart-card');
+        if(card && !card.querySelector('canvas')){
+          // Replace whatever is inside the chart-card with a fresh chart-wrap+canvas
+          card.innerHTML = '<div class="chart-title">'+titleText+'</div>'+
+                           '<div class="chart-wrap tall"><canvas id="'+canvasId+'"></canvas></div>';
+          console.log('[EA-v7] Restored canvas #'+canvasId);
+        }
+      }
+    });
+  }
+
+  // ── Hook into the render pipeline so dedupe runs after every render ──────
+  function wrapRenderer(fname){
+    if(typeof window[fname] !== 'function') return false;
+    if(window[fname].__v7Wrap) return true;
+    const orig = window[fname];
+    window[fname] = function(){
+      const r = orig.apply(this, arguments);
+      setTimeout(() => { safeguardCanvasCreation(); dedupeAnalytics(); }, 80);
+      return r;
+    };
+    window[fname].__v7Wrap = true;
+    return true;
+  }
+
+  // Try wrapping the relevant functions; retry until they exist
+  function wireUp(){
+    let allWrapped = true;
+    ['renderAnalytics','renderIssueTypeTrend','renderIssueTypeByProject','switchTab','renderAll']
+      .forEach(fn => { if(!wrapRenderer(fn)) allWrapped = false; });
+    return allWrapped;
+  }
+
+  // ── Mapping inspector button — opens a clean console dump ────────────────
+  function addInspectButton(){
+    const actions = document.querySelector('.header-actions');
+    if(!actions || document.getElementById('ea-v7-inspect-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'ea-v7-inspect-btn';
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.style.cssText = 'font-size:.7rem;background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:var(--accent4);';
+    btn.title = 'Print current field mapping and a sample row to the browser console (F12). Useful for debugging why a chart shows no data.';
+    btn.innerHTML = '🔍 Inspect';
+    btn.onclick = function(){
+      console.group('%c[EA-Inspect] Field Mapping', 'background:#f59e0b;color:#000;padding:2px 8px;border-radius:4px;font-weight:bold;');
+      console.table(window.S && S.fieldMap ? S.fieldMap : {});
+      console.groupEnd();
+      console.group('%c[EA-Inspect] Sample Row (S.raw[0])', 'background:#00d4ff;color:#000;padding:2px 8px;border-radius:4px;font-weight:bold;');
+      console.log(window.S && S.raw && S.raw[0] ? S.raw[0] : 'No data loaded');
+      console.groupEnd();
+      console.group('%c[EA-Inspect] Field Coverage (non-empty values per canonical field)', 'background:#10b981;color:#000;padding:2px 8px;border-radius:4px;font-weight:bold;');
+      if(window.S && Array.isArray(S.raw)){
+        const cov = {};
+        Object.keys(S.fieldMap || {}).forEach(f => {
+          const n = S.raw.filter(r => r[f] && String(r[f]).trim() && String(r[f]).trim() !== '-').length;
+          cov[f] = { mapped_to: S.fieldMap[f], non_empty_rows: n, pct: S.raw.length ? Math.round(n/S.raw.length*100)+'%' : '—' };
+        });
+        console.table(cov);
+      }
+      console.groupEnd();
+      alert('Mapping inspector printed to console.\n\nPress F12 to open developer tools, then click the Console tab. Screenshot it and paste here.');
+    };
+    actions.appendChild(btn);
+  }
+
+  // ── Boot sequence ────────────────────────────────────────────────────────
+  function boot(){
+    wireUp();
+    safeguardCanvasCreation();
+    dedupeAnalytics();
+    addInspectButton();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    setTimeout(boot, 200);
+  }
+
+  // Retry wrapping until all renderers are wrapped (in case v6 loads later)
+  let retries = 0;
+  const retryIv = setInterval(() => {
+    retries++;
+    if(wireUp() || retries > 15){ clearInterval(retryIv); }
+  }, 400);
+
+  // Periodic safety dedupe (slow tick — just a backstop)
+  let ticks = 0;
+  const safetyIv = setInterval(() => {
+    dedupeAnalytics();
+    ticks++;
+    if(ticks > 60){ clearInterval(safetyIv); } // stop after ~2 minutes
+  }, 2000);
+
+  // Also re-run on any visible analytics tab open
+  document.addEventListener('click', function(e){
+    const txt = (e.target && e.target.textContent || '').toLowerCase();
+    if(txt.includes('analytics')){
+      setTimeout(() => { safeguardCanvasCreation(); dedupeAnalytics(); }, 120);
+      setTimeout(dedupeAnalytics, 400);
+    }
+  }, true);
+
+  console.log('[EA-v7] Analytics dedupe + canvas safeguard active. Click 🔍 Inspect to debug field mapping.');
+})();
+</script>
+
+<style id="excel-analyser-v7-styles">
+#ea-v7-inspect-btn:hover { filter: brightness(1.15); background: rgba(245,158,11,.2); }
+</style>
+<!-- END v7 ANALYTICS CLEANUP PATCH ────────────────────────────────────────── -->
+<!-- ════════════════════════════════════════════════════════════════════════════════
+     EXCEL ANALYSER — v8 AUTO-REOPEN PATCH
+     ─────────────────────────────────────────────────────────────────────────────
+     Paste this immediately BEFORE the closing </body> tag of your dashboard.
+     It can sit anywhere among the v6 / v7 patches — order does not matter.
+
+     What v8 does:
+       ✅ On page load, if your most recent file is in browser cache, the
+          dashboard re-opens it automatically (skipping the upload screen).
+       ✅ Hold SHIFT while reloading the page to skip auto-open (lands on
+          upload screen as before).
+       ✅ A small "Auto-open: ON / OFF" toggle is added to the upload screen
+          so you can permanently disable this if you prefer.
+
+     Safe to apply multiple times. Zero dependencies.
+     ════════════════════════════════════════════════════════════════════════════ -->
+
+<script id="excel-analyser-v8-autoload">
+(function(){
+  if(window.__EA_V8_APPLIED) return;
+  window.__EA_V8_APPLIED = true;
+
+  // ── Preference (defaults to ON) ──────────────────────────────────────────
+  function autoloadEnabled(){
+    return localStorage.getItem('ea_autoload') !== '0'; // default true
+  }
+  function setAutoloadEnabled(b){
+    localStorage.setItem('ea_autoload', b ? '1' : '0');
+  }
+
+  // ── Detect Shift held during page load (skip auto-open this time) ────────
+  let shiftAtLoad = false;
+  window.addEventListener('keydown', function(e){ if(e.shiftKey) shiftAtLoad = true; }, true);
+  // Also check on first user interaction
+  try {
+    const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
+    if(navEntries && navEntries[0] && navEntries[0].type === 'reload'){
+      // best effort — no reliable way to detect modifier on reload, fall back to UI toggle
+    }
+  } catch(e){}
+
+  // ── Auto-reopen logic ────────────────────────────────────────────────────
+  function tryAutoReopen(){
+    if(!autoloadEnabled()){
+      console.log('[EA-v8] Auto-open disabled by preference. Toggle on the upload screen to re-enable.');
+      return false;
+    }
+    if(shiftAtLoad){
+      console.log('[EA-v8] Shift held during load — skipping auto-open.');
+      return false;
+    }
+    if(!window.S || !Array.isArray(S.recentFiles) || !S.recentFiles.length){
+      console.log('[EA-v8] No recent files to auto-open.');
+      return false;
+    }
+    const mostRecent = S.recentFiles[0];
+    if(!mostRecent || !mostRecent.name) return false;
+    if(typeof getStoredFileData !== 'function') return false;
+    const cached = getStoredFileData(mostRecent.name);
+    if(!cached){
+      console.log('[EA-v8] Most recent file ('+mostRecent.name+') has no cached binary. Skipping.');
+      return false;
+    }
+    if(typeof recentFileClick !== 'function'){
+      console.warn('[EA-v8] recentFileClick is not defined yet — cannot auto-open.');
+      return false;
+    }
+    console.log('[EA-v8] Auto-opening from cache:', mostRecent.name);
+    try {
+      recentFileClick(0);
+      return true;
+    } catch(e){
+      console.warn('[EA-v8] Auto-open failed:', e);
+      return false;
+    }
+  }
+
+  // ── Auto-open toggle on the upload screen ────────────────────────────────
+  function addToggle(){
+    const up = document.getElementById('upload-screen');
+    if(!up || document.getElementById('ea-autoload-toggle')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'ea-autoload-toggle';
+    wrap.style.cssText = 'margin-top:.8rem;font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:.5rem;';
+    const isOn = autoloadEnabled();
+    wrap.innerHTML =
+      '<span>Auto-open most recent file on refresh:</span>'+
+      '<button id="ea-autoload-btn" style="background:'+(isOn?'rgba(16,185,129,.15)':'var(--surface2)')+
+        ';border:1px solid '+(isOn?'var(--accent3)':'var(--border)')+
+        ';border-radius:6px;color:'+(isOn?'var(--accent3)':'var(--muted)')+
+        ';padding:.22rem .6rem;font-size:.72rem;cursor:pointer;font-family:DM Sans,sans-serif;">'+
+        (isOn?'ON ✓':'OFF')+
+      '</button>'+
+      '<span style="font-size:.65rem;opacity:.6;">(or hold Shift while refreshing to skip once)</span>';
+    up.appendChild(wrap);
+    document.getElementById('ea-autoload-btn').onclick = function(){
+      const newVal = !autoloadEnabled();
+      setAutoloadEnabled(newVal);
+      this.style.background = newVal ? 'rgba(16,185,129,.15)' : 'var(--surface2)';
+      this.style.borderColor = newVal ? 'var(--accent3)' : 'var(--border)';
+      this.style.color = newVal ? 'var(--accent3)' : 'var(--muted)';
+      this.textContent = newVal ? 'ON ✓' : 'OFF';
+    };
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  function boot(){
+    addToggle();
+    // Give the original initialisation a tick to populate S.recentFiles
+    setTimeout(tryAutoReopen, 350);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    setTimeout(boot, 100);
+  }
+
+  console.log('[EA-v8] Auto-open patch ready. Hold Shift while reloading to skip auto-open once. Toggle on upload screen for permanent setting.');
+})();
+</script>
+<!-- END v8 AUTO-REOPEN PATCH ──────────────────────────────────────────────── -->
+<!-- ════════════════════════════════════════════════════════════════════════════════
+     EXCEL ANALYSER — v10 RENDERER LOCK-IN
+     ─────────────────────────────────────────────────────────────────────────────
+     Paste this immediately BEFORE the closing </body> tag, AFTER all other
+     patches (v6, v7, v8, v9). You can REPLACE v9 with this — v10 is a superset.
+
+     Root cause v10 fixes:
+       The v6 patch's installRobustRenderers() runs on DOMContentLoaded, which
+       fires AFTER v9's script body. v6 was therefore reassigning
+       window.renderHeatmap back to its broken version every time. v10 holds a
+       PRIVATE reference and re-claims the function every 250ms — v6 cannot
+       win this race.
+
+     ════════════════════════════════════════════════════════════════════════════ -->
+
+<script id="excel-analyser-v10-lockin">
+(function(){
+  if(window.__EA_V10_APPLIED) return;
+  window.__EA_V10_APPLIED = true;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function getRows(){
+    if(!window.S) return [];
+    if(Array.isArray(S.filtered) && S.filtered.length) return S.filtered;
+    if(Array.isArray(S.raw)) return S.raw;
+    return [];
+  }
+  function toDate(v){
+    if(v == null || v === '' || v === '-') return null;
+    if(v instanceof Date) return isNaN(v) ? null : v;
+    const s = String(v).trim();
+    if(!s) return null;
+    const n = parseFloat(s);
+    if(!isNaN(n) && n > 40000 && n < 80000 && s.indexOf(' ') === -1 && s.indexOf('-') === -1 && s.indexOf('/') === -1){
+      const excelEpoch = new Date(1899, 11, 30);
+      return new Date(excelEpoch.getTime() + Math.round(n * 86400000));
+    }
+    const d = new Date(s);
+    if(!isNaN(d)) return d;
+    const m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if(m){ const dd = new Date(+m[3], +m[2]-1, +m[1]); if(!isNaN(dd)) return dd; }
+    return null;
+  }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function qjs(s){ return String(s == null ? '' : s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+  function showRows(title, sub, rs){
+    if(typeof window.showTicketListPanel === 'function') showTicketListPanel(title, sub, rs);
+    else alert(title + '\n' + sub + '\n' + rs.length + ' tickets');
+  }
+
+  // ── PRIVATE renderers (never exposed to window directly) ─────────────────
+
+  const heatmapImpl = function(){
+    const container = document.getElementById('heatmap-container');
+    if(!container) return;
+    const rows = getRows();
+    if(!rows.length){
+      container.innerHTML = '<div class="ea-empty-box"><b>No data loaded yet.</b></div>';
+      return;
+    }
+    const dated = rows.map(r => ({ r, dt: toDate(r['Created']) || toDate(r['Resolved']) })).filter(x => x.dt);
+    if(!dated.length){
+      container.innerHTML = '<div class="ea-empty-box"><b>v10: parsed 0 dates from ' + rows.length +
+        ' rows.</b><br>Created sample: <code>' + esc(String(rows[0]['Created']).slice(0, 60)) + '</code></div>';
+      return;
+    }
+    const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const dh = {};
+    days.forEach((_,i)=>{ dh[i] = {}; for(let h=0; h<24; h++) dh[i][h] = 0; });
+    const byDate = {};
+    dated.forEach(x => {
+      const dow = (x.dt.getDay() + 6) % 7;
+      const hr = x.dt.getHours();
+      dh[dow][hr]++;
+      const k = x.dt.getFullYear() + '-' + String(x.dt.getMonth()+1).padStart(2,'0') + '-' + String(x.dt.getDate()).padStart(2,'0');
+      if(!byDate[k]) byDate[k] = { total:0, inc:0, sr:0 };
+      byDate[k].total++;
+      if(x.r['Issue Type'] === 'Incident') byDate[k].inc++;
+      else if(x.r['Issue Type'] === 'Service Request') byDate[k].sr++;
+    });
+    const allVals = [];
+    days.forEach((_,i) => { for(let h=0; h<24; h++) allVals.push(dh[i][h]); });
+    const maxV = Math.max(1, ...allVals);
+
+    const cw = 30, ch = 22, padL = 50, padT = 24;
+    const svgW = padL + 24*cw + 10;
+    const svgH = padT + 7*ch + 12;
+    let svg = '<svg width="' + svgW + '" height="' + svgH + '" style="font-family:DM Sans,Arial;display:block;max-width:100%">';
+    for(let h=0; h<24; h++){
+      if(h % 3 === 0){
+        const x = padL + h*cw + cw/2;
+        svg += '<text x="' + x + '" y="15" text-anchor="middle" fill="#8b949e" font-size="9">' + h + ':00</text>';
+      }
+    }
+    days.forEach((day, i) => {
+      const y = padT + i*ch;
+      svg += '<text x="' + (padL-7) + '" y="' + (y+15) + '" text-anchor="end" fill="#8b949e" font-size="10">' + day + '</text>';
+      for(let h=0; h<24; h++){
+        const v = dh[i][h];
+        const intensity = v / maxV;
+        const alpha = (0.08 + intensity*0.88).toFixed(2);
+        const x = padL + h*cw;
+        svg += '<rect class="ea-clickable" onclick="eaV10DayHour(' + i + ',' + h + ')" x="' + x + '" y="' + y +
+               '" width="' + (cw-2) + '" height="' + (ch-2) + '" rx="3" fill="rgba(0,212,255,' + alpha +
+               ')" stroke="#3a4452" stroke-width=".5"><title>' + day + ' ' + h + ':00 — ' + v + ' tickets</title></rect>';
+        if(v && cw > 18){
+          svg += '<text pointer-events="none" x="' + (x+cw/2) + '" y="' + (y+15) + '" text-anchor="middle" fill="' +
+                 (intensity > 0.55 ? '#06121f' : '#cbd5e1') + '" font-size="9">' + v + '</text>';
+        }
+      }
+    });
+    svg += '</svg>';
+
+    const keys = Object.keys(byDate).sort();
+    const maxD = Math.max(1, ...keys.map(k => byDate[k].total));
+    let bars = '<div style="display:flex;align-items:flex-end;gap:3px;height:84px;overflow-x:auto;padding-bottom:4px;margin-top:8px">';
+    keys.forEach(k => {
+      const v = byDate[k];
+      const h = Math.max(4, Math.round(v.total / maxD * 76));
+      const niceLbl = new Date(k + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      bars += '<div class="ea-clickable" onclick="eaV10DateDrill(\'' + k + '\')" ' +
+              'title="' + k + ': ' + v.total + ' tickets (' + v.inc + ' Inc, ' + v.sr + ' SR)" ' +
+              'style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:32px">' +
+              '<div style="width:100%;height:' + h + 'px;background:linear-gradient(to top,#ef4444,#00d4ff);border-radius:3px 3px 0 0;opacity:.9"></div>' +
+              '<div style="font-size:8px;color:var(--muted);margin-top:3px;white-space:nowrap">' + niceLbl + '</div>' +
+              '<div style="font-size:9px;font-weight:700;color:var(--text)">' + v.total + '</div></div>';
+    });
+    bars += '</div>';
+
+    container.innerHTML =
+      '<div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;font-weight:600">📊 Ticket volume by weekday & hour · click any cell to view tickets</div>' +
+      svg +
+      '<div style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 .4rem;font-weight:600">📅 Daily ticket count · click any bar to view tickets</div>' +
+      bars;
+  };
+
+  const agentImpl = function(){
+    const el = document.getElementById('agent-table');
+    if(!el) return;
+    const rows = getRows();
+    if(!rows.length){
+      el.innerHTML = '<div style="padding:.9rem;color:var(--muted);font-size:.8rem;">No data loaded yet.</div>';
+      return;
+    }
+    const candidates = ['Current Worker','Assignee','Worker','Agent','Resolved By','Reporter'];
+    let workerField = null;
+    let coverageNote = '';
+    for(const f of candidates){
+      const nonEmpty = rows.filter(r => r[f] && String(r[f]).trim() && r[f] !== '-').length;
+      if(nonEmpty > 0){ workerField = f; coverageNote = nonEmpty + ' / ' + rows.length + ' rows'; break; }
+    }
+    if(!workerField){
+      el.innerHTML = '<div style="padding:.9rem;color:var(--muted);font-size:.8rem;"><b>v10:</b> no worker column has data. Tried: ' + candidates.join(', ') + '</div>';
+      return;
+    }
+    const counts = {};
+    rows.forEach(r => {
+      const w = String(r[workerField] || '').trim();
+      if(!w || w === '-') return;
+      counts[w] = (counts[w] || 0) + 1;
+    });
+    const ranked = Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0, 30);
+    if(!ranked.length){
+      el.innerHTML = '<div style="padding:.9rem;color:var(--muted);font-size:.8rem;">No workers found.</div>';
+      return;
+    }
+    const CLOSED = new Set(['resolved with clarification','db script delivered','delivered',
+      'release move to production','client release approval','client approval (db script)',
+      'poc release approval','client hotfix testing','closed','done','resolved','fixed','complete','completed']);
+    let html = '<table><thead><tr>' +
+               '<th>#</th><th>Agent (' + workerField + ')</th><th>Total</th><th>🔴 Inc</th><th>🔵 SR</th><th>Critical</th><th>Closed</th>' +
+               '</tr></thead><tbody>';
+    ranked.forEach(([w, total], i) => {
+      const sub = rows.filter(r => String(r[workerField] || '').trim() === w);
+      const inc = sub.filter(r => r['Issue Type'] === 'Incident').length;
+      const sr = sub.filter(r => r['Issue Type'] === 'Service Request').length;
+      const crit = sub.filter(r => r['Priority'] === 'Critical').length;
+      const closed = sub.filter(r => CLOSED.has(String(r['Status'] || '').toLowerCase().trim())).length;
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
+      const wEnc = qjs(w);
+      html += '<tr class="ea-clickable" onclick="eaV10DrillWorker(\'' + wEnc + '\',\'' + qjs(workerField) + '\')">' +
+              '<td style="color:var(--muted)">' + medal + '</td>' +
+              '<td style="color:var(--accent);font-weight:600">' + esc(w) + '</td>' +
+              '<td><strong>' + total + '</strong></td>' +
+              '<td>' + (inc || '–') + '</td>' +
+              '<td>' + (sr || '–') + '</td>' +
+              '<td>' + (crit ? '<span class="badge badge-critical">' + crit + '</span>' : '–') + '</td>' +
+              '<td>' + (closed ? '<span class="badge badge-green">' + closed + '</span>' : '–') + '</td>' +
+              '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  };
+
+  // ── Drill-down handlers ───────────────────────────────────────────────────
+  window.eaV10DayHour = function(dow, hour){
+    const rs = getRows().filter(r => {
+      const d = toDate(r['Created']);
+      return d && ((d.getDay() + 6) % 7) === dow && d.getHours() === hour;
+    });
+    const names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    showRows(names[dow] + ' at ' + String(hour).padStart(2,'0') + ':00', rs.length + ' tickets', rs);
+  };
+  window.eaV10DateDrill = function(key){
+    const rs = getRows().filter(r => {
+      const d = toDate(r['Created']) || toDate(r['Resolved']);
+      if(!d) return false;
+      const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      return k === key;
+    });
+    showRows(key, rs.length + ' tickets', rs);
+  };
+  window.eaV10DrillWorker = function(w, field){
+    const rs = getRows().filter(r => String(r[field] || '').trim() === w);
+    showRows(w, rs.length + ' tickets', rs);
+  };
+
+  // ── LOCK-IN: continuously re-claim window.renderHeatmap and renderAgentLeaderboard
+  function claim(){
+    if(window.renderHeatmap !== heatmapImpl) window.renderHeatmap = heatmapImpl;
+    if(window.renderAgentLeaderboard !== agentImpl) window.renderAgentLeaderboard = agentImpl;
+  }
+  // Claim immediately and every 250ms
+  claim();
+  setInterval(claim, 250);
+
+  // ── eaRefresh — force re-render (calls the impls DIRECTLY, bypassing window.*)
+  window.eaRefresh = function(){
+    claim();
+    try { heatmapImpl(); } catch(e){ console.warn('[EA-v10] heatmap:', e); }
+    try { agentImpl(); } catch(e){ console.warn('[EA-v10] agent:', e); }
+    console.log('[EA-v10] Refreshed. Heatmap rows:', getRows().length);
+  };
+
+  // ── Fire on file load and tab switch ─────────────────────────────────────
+  document.addEventListener('click', e => {
+    const t = (e.target?.textContent || '').toLowerCase();
+    if(t.includes('analytics')){
+      setTimeout(() => { claim(); try { heatmapImpl(); agentImpl(); } catch(e){} }, 250);
+      setTimeout(() => { claim(); try { heatmapImpl(); agentImpl(); } catch(e){} }, 700);
+    }
+  }, true);
+
+  // Poll for data on initial load
+  let pollChecks = 0;
+  const pollIv = setInterval(() => {
+    pollChecks++;
+    if(window.S && Array.isArray(S.raw) && S.raw.length){
+      clearInterval(pollIv);
+      claim();
+      // Only render if analytics tab is active
+      const at = document.getElementById('tab-analytics');
+      if(at && at.classList.contains('active')){
+        setTimeout(() => { try { heatmapImpl(); agentImpl(); } catch(e){} }, 100);
+      }
+    } else if(pollChecks > 60){
+      clearInterval(pollIv);
+    }
+  }, 400);
+
+  console.log('[EA-v10] Lock-in active. window.renderHeatmap and renderAgentLeaderboard are now CLAIMED. Type eaRefresh() to force re-render.');
+})();
+</script>
+<!-- END v10 LOCK-IN ───────────────────────────────────────────────────────── -->
 </body>
 </html>
